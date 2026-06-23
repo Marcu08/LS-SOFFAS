@@ -48,8 +48,8 @@ setInterval(fs_cleanup, 3600000);
 fs_cleanup();
 
 app.use("/api/auth", require("./src/routes/auth"));
-app.use("/api/documenti", require("./src/routes/documenti"));
 app.use("/api/documenti", require("./src/routes/documentiRaw"));
+app.use("/api/documenti", require("./src/routes/documenti"));
 app.use("/api/giacenze", require("./src/routes/giacenze"));
 app.use("/api/export", require("./src/routes/export"));
 
