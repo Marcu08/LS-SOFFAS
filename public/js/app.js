@@ -59,11 +59,16 @@ const App = {
     if (this.state.token) {
       headers["Authorization"] = "Bearer " + this.state.token;
     }
-    const res = await fetch(API_BASE + path, { ...options, headers });
+    const retries = options._retryCount || 0;
+    let res = await fetch(API_BASE + path, { ...options, headers });
     if (res.status === 401) {
       this.clearSession();
       this.showLogin();
       throw new Error("Sessione scaduta");
+    }
+    if (!res.ok && retries < 1) {
+      await new Promise((r) => setTimeout(r, 2000));
+      res = await fetch(API_BASE + path, { ...options, headers, _retryCount: retries + 1 });
     }
     return res;
   },

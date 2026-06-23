@@ -7,7 +7,7 @@
       el.innerHTML = this.renderDashboard(data);
       this.attach(el, data);
     } catch (e) {
-      el.innerHTML = `<div class="card"><p style="text-align:center;padding:40px;color:var(--danger);">Errore: ${e.message}</p><p style="text-align:center;color:var(--gray-500);font-size:13px;">Le tabelle del database non sono state create. Vai su Supabase SQL Editor ed esegui lo schema.</p></div>`;
+      el.innerHTML = `<div class="card"><p style="text-align:center;padding:40px;color:var(--danger);">Errore: ${e.message}</p><p style="text-align:center;color:var(--gray-500);font-size:13px;">Il server potrebbe essere in fase di avvio (Render cold start).</p><button onclick="Dashboard.render(document.getElementById('app-content'))" style="display:block;margin:12px auto 0;padding:8px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;">Riprova</button></div>`;
     }
   },
 
