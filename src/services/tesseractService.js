@@ -1,14 +1,11 @@
 ﻿const Tesseract = require("tesseract.js");
-const path = require("path");
+const fs = require("fs");
 
 class TesseractService {
   async recognize(imagePath, lang = "ita") {
     try {
-      const langPath = path.join(__dirname, "../..");
-      const { data } = await Tesseract.recognize(imagePath, lang, {
-        langPath,
-        logger: () => {},
-      });
+      const imageBuffer = fs.readFileSync(imagePath);
+      const { data } = await Tesseract.recognize(imageBuffer, { lang, logger: () => {} });
       return { text: data.text, confidence: data.confidence, words: data.words };
     } catch (error) {
       console.error("Tesseract error:", error.message);
