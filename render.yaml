@@ -1,0 +1,19 @@
+﻿services:
+  - type: web
+    name: gestionale-ls-soffass
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: SUPABASE_URL
+        value: https://aflilhayyaqjftaruulq.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_zRgpt_2uUkkvu_tX8jucsQ_u3pDmMAH
+      - key: PORT
+        value: "3000"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: ./uploads
