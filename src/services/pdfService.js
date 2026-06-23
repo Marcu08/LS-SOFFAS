@@ -29,11 +29,11 @@ class PdfService {
     fs.mkdirSync(pageDir, { recursive: true });
     const outputPrefix = path.join(pageDir, "page");
     const pdftoppm = findPdftoppm();
-    const cmd = `${pdftoppm} -r ${dpi} -png "${pdfPath}" "${outputPrefix}"`;
+    const cmd = `${pdftoppm} -r ${dpi} -jpeg "${pdfPath}" "${outputPrefix}"`;
     try {
       execSync(cmd, { timeout: 120000, stdio: "pipe" });
     } catch (e) { throw new Error("Errore conversione PDF: " + e.message); }
-    const images = fs.readdirSync(pageDir).filter((f) => f.endsWith(".png")).sort().map((f) => path.join(pageDir, f));
+    const images = fs.readdirSync(pageDir).filter((f) => f.endsWith(".jpg")).sort().map((f) => path.join(pageDir, f));
     if (images.length === 0) throw new Error("Nessuna immagine generata dal PDF");
     return { images, pageDir };
   }
