@@ -4,7 +4,7 @@
     env: node
     region: frankfurt
     plan: free
-    buildCommand: npm install
+    buildCommand: chmod +x render-build.sh && ./render-build.sh && npm install
     startCommand: node server.js
     envVars:
       - key: SUPABASE_URL

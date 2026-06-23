@@ -1,22 +1,20 @@
 ﻿const Tesseract = require("tesseract.js");
+const path = require("path");
 
 class TesseractService {
   async recognize(imagePath, lang = "ita") {
     try {
+      const langPath = path.join(__dirname, "../..");
       const { data } = await Tesseract.recognize(imagePath, lang, {
-        logger: (m) => {},
+        langPath,
+        logger: () => {},
       });
-      return {
-        text: data.text,
-        confidence: data.confidence,
-        words: data.words,
-      };
+      return { text: data.text, confidence: data.confidence, words: data.words };
     } catch (error) {
       console.error("Tesseract error:", error.message);
       return { text: "", confidence: 0, words: [], error: error.message };
     }
   }
-
   async recognizeAll(imagePaths, lang = "ita") {
     const results = [];
     for (let i = 0; i < imagePaths.length; i++) {
@@ -26,5 +24,4 @@ class TesseractService {
     return results;
   }
 }
-
 module.exports = new TesseractService();
