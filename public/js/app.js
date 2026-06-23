@@ -8,7 +8,7 @@ const App = {
     pages: ["dashboard", "ingresso", "giacenze", "movimenti", "export"],
     pageTitles: {
       dashboard: "Dashboard",
-      ingresso: "Nuovo Ingresso",
+      ingresso: "Nuova Bolla",
       giacenze: "Giacenze",
       movimenti: "Movimenti",
       export: "Esporta Dati",
@@ -149,7 +149,7 @@ const App = {
         Dashboard.render(content);
         break;
       case "ingresso":
-        Ingresso.render(content);
+        UploadWizard.render(content);
         break;
       case "giacenze":
         Giacenze.render(content);

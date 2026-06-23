@@ -84,7 +84,59 @@ CREATE TABLE IF NOT EXISTS movimenti (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- INDICI
+-- STATO DOCUMENTO ENUM
+DO $$ BEGIN
+  CREATE TYPE stato_documento AS ENUM (
+    'uploaded', 'processing', 'extracted',
+    'needs_review', 'ready_to_confirm', 'confirmed', 'error'
+  );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- Aggiungi colonne stato ai documenti esistenti
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS stato stato_documento DEFAULT 'confirmed';
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS ocr_confidence DECIMAL(5,2);
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS confirmed_by UUID;
+ALTER TABLE documenti ADD COLUMN IF NOT EXISTS raw_document_id UUID;
+
+-- Backfill documenti esistenti come confirmed
+UPDATE documenti SET stato = 'confirmed', confirmed_at = COALESCE(confirmed_at, created_at) WHERE stato IS NULL;
+
+-- DOCUMENTI_RAW (buffer temporaneo pre-conferma)
+CREATE TABLE IF NOT EXISTS documenti_raw (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  pdf_path TEXT NOT NULL,
+  stato stato_documento DEFAULT 'uploaded',
+  ocr_raw_text TEXT,
+  ocr_confidence DECIMAL(5,2),
+  dati_estratti JSONB,
+  error_message TEXT,
+  created_by UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- EVENT_LOG (audit trail)
+CREATE TABLE IF NOT EXISTS event_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  documento_id UUID REFERENCES documenti_raw(id) ON DELETE CASCADE,
+  evento VARCHAR(50) NOT NULL,
+  dettaglio JSONB,
+  created_by UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- INDICI documenti_raw
+CREATE INDEX IF NOT EXISTS idx_raw_stato ON documenti_raw(stato);
+CREATE INDEX IF NOT EXISTS idx_raw_created ON documenti_raw(created_at);
+
+-- INDICI event_log
+CREATE INDEX IF NOT EXISTS idx_event_documento ON event_log(documento_id);
+CREATE INDEX IF NOT EXISTS idx_event_created ON event_log(created_at);
+
+-- INDICI (esistenti)
 CREATE INDEX IF NOT EXISTS idx_documenti_numero_bolla ON documenti(numero_bolla);
 CREATE INDEX IF NOT EXISTS idx_documenti_data ON documenti(data_documento);
 CREATE INDEX IF NOT EXISTS idx_documenti_tipo ON documenti(tipo);
@@ -100,17 +152,41 @@ ALTER TABLE documenti ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dettaglio_documenti ENABLE ROW LEVEL SECURITY;
 ALTER TABLE giacenze ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movimenti ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documenti_raw ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_log ENABLE ROW LEVEL SECURITY;
 
 -- POLICY: accesso completo per anon (server) e authenticated (admin)
-DROP POLICY IF EXISTS "Utenti autenticati - accesso completo documenti" ON documenti;
+DROP POLICY IF EXISTS "Accesso completo documenti" ON documenti;
 CREATE POLICY "Accesso completo documenti"
   ON documenti FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Utenti autenticati - accesso completo dettaglio" ON dettaglio_documenti;
+DROP POLICY IF EXISTS "Accesso completo dettaglio" ON dettaglio_documenti;
 CREATE POLICY "Accesso completo dettaglio"
   ON dettaglio_documenti FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Utenti autenticati - accesso completo giacenze" ON giacenze;
+DROP POLICY IF EXISTS "Accesso completo giacenze" ON giacenze;
 CREATE POLICY "Accesso completo giacenze"
   ON giacenze FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS "Utenti autenticati - accesso completo movimenti" ON movimenti;
+DROP POLICY IF EXISTS "Accesso completo movimenti" ON movimenti;
 CREATE POLICY "Accesso completo movimenti"
   ON movimenti FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- RLS documenti_raw: INSERT e SELECT per authenticated, UPDATE solo service_role
+DROP POLICY IF EXISTS "documenti_raw_insert" ON documenti_raw;
+CREATE POLICY "documenti_raw_insert"
+  ON documenti_raw FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "documenti_raw_select" ON documenti_raw;
+CREATE POLICY "documenti_raw_select"
+  ON documenti_raw FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "documenti_raw_update_service" ON documenti_raw;
+CREATE POLICY "documenti_raw_update_service"
+  ON documenti_raw FOR UPDATE TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "documenti_raw_delete_service" ON documenti_raw;
+CREATE POLICY "documenti_raw_delete_service"
+  ON documenti_raw FOR DELETE TO service_role USING (true);
+
+-- RLS event_log: INSERT solo service_role, SELECT per authenticated
+DROP POLICY IF EXISTS "event_log_insert_service" ON event_log;
+CREATE POLICY "event_log_insert_service"
+  ON event_log FOR INSERT TO service_role WITH CHECK (true);
+DROP POLICY IF EXISTS "event_log_select" ON event_log;
+CREATE POLICY "event_log_select"
+  ON event_log FOR SELECT TO authenticated USING (true);

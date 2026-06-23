@@ -4,16 +4,13 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const { createClient } = require("@supabase/supabase-js");
+const { supabase, supabaseAdmin } = require("./src/db/supabase");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
 app.locals.supabase = supabase;
+app.locals.supabaseAdmin = supabaseAdmin;
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
@@ -52,6 +49,7 @@ fs_cleanup();
 
 app.use("/api/auth", require("./src/routes/auth"));
 app.use("/api/documenti", require("./src/routes/documenti"));
+app.use("/api/documenti", require("./src/routes/documentiRaw"));
 app.use("/api/giacenze", require("./src/routes/giacenze"));
 app.use("/api/export", require("./src/routes/export"));
 

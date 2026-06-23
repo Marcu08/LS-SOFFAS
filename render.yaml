@@ -17,3 +17,5 @@
         generateValue: true
       - key: UPLOAD_DIR
         value: ./uploads
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
