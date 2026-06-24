@@ -243,7 +243,7 @@ const UploadWizard = {
               <input type="text" id="pw-causale_trasporto" value="${data.causale_trasporto || ''}">
             </div>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="pw-dettaglio-group">
             <label>Packing List - Dettaglio</label>
             <div id="pw-dettaglio-container" style="overflow-x:auto;">
               <table style="width:100%;font-size:12px;min-width:400px;">
@@ -252,6 +252,7 @@ const UploadWizard = {
               </table>
               <button class="btn btn-sm btn-outline" style="margin-top:6px;" onclick="UploadWizard.aggiungiRiga()">+ Aggiungi riga</button>
             </div>
+            <div id="pw-dettaglio-uscita-note" style="display:none;font-size:12px;color:var(--gray-500);padding:8px;background:var(--gray-100);border-radius:4px;">Lotto derivato dal codice articolo — dettaglio non richiesto per USCITA</div>
           </div>
           <div class="form-group">
             <label>Note</label>
@@ -287,7 +288,29 @@ const UploadWizard = {
       if (el) el.addEventListener("input", () => this.marcaModifica(el, id));
     });
 
+    const tipoSel = document.getElementById("pw-tipo");
+    if (tipoSel) {
+      tipoSel.addEventListener("change", () => this.toggleDettaglio());
+      this.toggleDettaglio();
+    }
+
     document.getElementById("pw-confirm-btn").addEventListener("click", () => this.confirm());
+  },
+
+  toggleDettaglio() {
+    const tipo = document.getElementById("pw-tipo")?.value;
+    const group = document.getElementById("pw-dettaglio-group");
+    const note = document.getElementById("pw-dettaglio-uscita-note");
+    if (!group) return;
+    if (tipo === "USCITA") {
+      group.querySelector("table").style.display = "none";
+      group.querySelector("button").style.display = "none";
+      if (note) note.style.display = "block";
+    } else {
+      group.querySelector("table").style.display = "";
+      group.querySelector("button").style.display = "";
+      if (note) note.style.display = "none";
+    }
   },
 
   saveOrigValues() {

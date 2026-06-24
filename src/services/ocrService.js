@@ -61,15 +61,15 @@ class OcrService {
       data.destinatario = destMatch[1].replace(/\s+\d+\s*$/, "").replace(/\s*SECONDO.*$/, "").trim();
     }
 
-    const artLine = text.match(/([A-Z0-9]{8,16})\s+(\d{6,8})\s+(.{5,60}?)\s+(\d{3,4})\/(\d{3,4})\s+KG\s+([\d.,]+)/i);
+    const artLine = text.match(/([A-Z0-9]{8,16})\s+(\d{6,8})\s+(.{5,}?)\s+KG\s+([\d.,]+)/i);
     if (artLine) {
       data.codice_articolo = artLine[1].trim();
       data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();
-      data.quantita = itParse(artLine[6]);
+      data.quantita = itParse(artLine[4]);
     }
 
     if (!data.codice_articolo) {
-      const fb = text.match(/(\w{10,20})\s+(\d{6,8})\s+(.{5,60}?)\s+(?:KG|LT|MT)\s+([\d.,]+)/i);
+      const fb = text.match(/(\w{10,20})\s+(\d{6,8})\s+(.{5,}?)\s+(?:KG|LT|MT)\s+([\d.,]+)/i);
       if (fb) {
         data.codice_articolo = fb[1].trim();
         data.descrizione_articolo = fb[3].trim();
@@ -167,11 +167,14 @@ class OcrService {
   }
 
   classifyDocument(text) {
-    if (/logistic\s*solution|soffass/i.test(text)) {
-      if (/DESTINATARIO[\s\S]{0,200}?(?:logistic\s*solution|soffass)/i.test(text)) {
-        return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
-      }
-      return { tipo: "ENTRATA", motivazione: "Trovato Logistic Solution/Soffass nel testo" };
+    const destinatarioMatch = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,500}?(?:logistic\s*solution|soffass\s*c\/o\s*logistic\s*solution)/i);
+    const luogoSpedizioneMatch = text.match(/LUOGO\s*SPEDIZIONE[\s\S]{0,500}?(?:logistic\s*solution|soffass\s*c\/o\s*logistic\s*solution)/i);
+
+    if (destinatarioMatch) {
+      return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
+    }
+    if (luogoSpedizioneMatch) {
+      return { tipo: "USCITA", motivazione: "Luogo Spedizione Logistic Solution" };
     }
     return { tipo: null, motivazione: "Non determinabile" };
   }
