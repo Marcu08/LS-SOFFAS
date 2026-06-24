@@ -108,12 +108,18 @@ const UploadWizard = {
     `;
 
     try {
-      const response = await fetch(imageData);
-      const blob = await response.blob();
+      const img = new Image();
+      img.src = imageData;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("Impossibile caricare l'immagine"));
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext("2d").drawImage(img, 0, 0);
 
-      const result = await Tesseract.recognize(blob, "ita", {
-        workerPath: "/lib/worker.min.js",
-        langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/ita@1.0.0/4.0.0/",
+      const worker = await Tesseract.createWorker("ita", 1, {
         logger: (m) => {
           const status = document.getElementById("ocr-status");
           const bar = document.getElementById("ocr-progress-bar");
@@ -121,9 +127,11 @@ const UploadWizard = {
           if (bar && m.progress) bar.style.width = Math.round(m.progress * 100) + "%";
         },
       });
+      const { data } = await worker.recognize(canvas);
+      await worker.terminate();
 
-      const ocrText = result.data.text;
-      const confidence = Math.round(result.data.confidence);
+      const ocrText = data.text;
+      const confidence = Math.round(data.confidence);
 
       document.getElementById("ocr-status").textContent = "OCR completato (" + confidence + "%)";
 
