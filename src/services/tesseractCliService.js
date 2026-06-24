@@ -1,7 +1,15 @@
-const { recognize } = require("tesseract.js");
+let tesseractModule = null;
+
+function getTesseract() {
+  if (!tesseractModule) {
+    tesseractModule = require("tesseract.js");
+  }
+  return tesseractModule;
+}
 
 class TesseractNodeService {
   async recognize(imagePath, lang = "ita") {
+    const { recognize } = getTesseract();
     const { data } = await recognize(imagePath, lang, {
       logger: (m) => {
         if (m.progress) {
