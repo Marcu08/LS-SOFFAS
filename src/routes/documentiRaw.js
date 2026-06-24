@@ -60,8 +60,10 @@ async function processOcrBackground({ id, pdfPath, userId }) {
     }
 
     const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
+    const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
 
-    await DocumentStateService.transition({ id, action: "confirm_ready", userId, meta: { confidence, warnings } });
+    await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
+    await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
 
     const { error: updateErr } = await supabaseAdmin
       .from("documenti_raw")
