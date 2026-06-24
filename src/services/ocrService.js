@@ -1,9 +1,11 @@
-﻿const PdfService = require("./pdfService");
-const TesseractService = require("./tesseractService");
-
-function itParse(v) {
+﻿function itParse(v) {
   if (!v) return null;
-  let s = v.replace(/\./g, "").replace(",", ".");
+  let s = v.trim();
+  if (/^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$/.test(s)) {
+    s = s.replace(/[.]/g, "").replace(",", ".");
+  } else {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
   const n = parseFloat(s);
   return isNaN(n) ? null : n;
 }
@@ -15,21 +17,6 @@ function itInt(v) {
 }
 
 class OcrService {
-  async processDocument(pdfPath) {
-    const { images, pageDir } = await PdfService.convertToImages(pdfPath);
-    try {
-      const maxPages = images.slice(0, 1);
-      const allText = "";
-      const parsed = this.parseDocument(allText);
-      parsed.ocr_raw_text = allText;
-      parsed.ocr_results = [{ page: 1, confidence: 0 }];
-      parsed.tipo = this.classifyDocument(allText).tipo;
-      return parsed;
-    } finally {
-      PdfService.cleanup(pageDir);
-    }
-  }
-
   parseDocument(text) {
     const data = {
       numero_bolla: null, numero_documento: null, numero_ordine: null,
@@ -50,13 +37,11 @@ class OcrService {
 
     data.numero_ordine = m(/N\.?\s*ORD\.?\s*ACQ[^0-9]*(\d{6,15})/i);
     data.causale_trasporto = m(/CAUSALE\s*TRASPORTO[^A-Z]*(\S+)/i);
+    data.numero_packing_list = m(/PACKING\s*LIST\s*No\.?\s*(\d+)/i);
+    data.numero_documento = m(/NUMERO\s+(\d{6,15})/i);
 
-    const bolla = m(/(?:NUMERO\s*(?:BOLLA|DDT|DOCUMENTO|TRASPORTO))\s*[:.\s]*(\d{6,15})/i) ||
-                  m(/DOCUMENTO\s*DI\s*TRASPORTO[\s\S]{0,100}?\b(\d{10})\b/i) ||
-                  m(/\b(\d{10})\b/);
-    data.numero_bolla = bolla;
-
-    data.numero_documento = m(/numeno\s*rrasronto[\s_]*(\d+)/i) || data.numero_bolla;
+    const refCliente = m(/\b(\d{10})\b.*Riferimento\s*Cliente/i) || m(/Riferimento\s*Cliente[^0-9]*(\d{6,15})/i);
+    data.numero_bolla = refCliente || data.numero_documento || data.numero_packing_list || m(/\b(\d{10})\b/);
 
     if (data.numero_ordine && !data.picking) data.picking = data.numero_ordine;
 
@@ -87,7 +72,7 @@ class OcrService {
       const fb = text.match(/(\w{10,20})\s+(\d{6,8})\s+(.{5,60}?)\s+(?:KG|LT|MT)\s+([\d.,]+)/i);
       if (fb) {
         data.codice_articolo = fb[1].trim();
-        data.descrizione_articolo = fb[2].trim();
+        data.descrizione_articolo = fb[3].trim();
         data.quantita = itParse(fb[4]);
       }
     }
@@ -98,19 +83,28 @@ class OcrService {
       data.vettore_targa = m(/TARGA\s*(\S+)/i);
     }
 
-    const totRow = text.match(/KG\s+([\d.,]+)\s*\n/i);
-    if (totRow) data.peso_totale = itParse(totRow[1]);
+    const totMatch = text.match(/Totale\s+Pos\.?\s+(\d+)\s+(\d+)\s+([\d.,]+)/i);
+    if (totMatch) {
+      data.colli = parseInt(totMatch[2], 10);
+      data.peso_totale = itParse(totMatch[3]);
+    }
 
     if (!data.peso_totale) {
-      const kgVals = [...text.matchAll(/(?:KG|PESO)\s+(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?)/gi)];
+      const kgRow = text.match(/TOTALEPESOUNITA[^0-9]*KG\s+([\d.,]+)/i);
+      if (kgRow) data.peso_totale = itParse(kgRow[1]);
+    }
+
+    if (!data.peso_totale) {
+      const kgVals = [...text.matchAll(/(?:KG|PESO)\s+(\d{1,3}(?:[.,]\s?\d{3})*(?:[.,]\d+)?)/gi)];
       if (kgVals.length > 0) {
-        const last = kgVals[kgVals.length - 1][1];
-        data.peso_totale = itParse(last);
+        data.peso_totale = itParse(kgVals[kgVals.length - 1][1]);
       }
     }
 
-    const colliMatch = text.match(/(\d{1,4})\s*CCL/i);
-    if (colliMatch) data.colli = parseInt(colliMatch[1], 10);
+    if (!data.colli) {
+      const cMatch = text.match(/Totale\s+(\d+)\s+(\d+)\s+([\d.,]+)/i);
+      if (cMatch) data.colli = parseInt(cMatch[2], 10);
+    }
 
     const grMatch = text.match(/GRAMMATURA\s*(\d+[.,]\d+)\s*g/i);
     if (grMatch) data.grammatura = parseFloat(grMatch[1].replace(",", "."));
@@ -124,17 +118,61 @@ class OcrService {
     const animaMatch = text.match(/DIAMETRO\s*ANIMA\s*(\d+)\s*mM/i);
     if (animaMatch) data.diametro_anima = parseInt(animaMatch[1], 10);
 
+    data.dettaglio = this.parseDettaglio(text);
+
     return data;
   }
 
+  parseDettaglio(text) {
+    const items = [];
+    const lines = text.split("\n");
+    let inTable = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (/Partita\s*Lotto/i.test(line)) {
+        inTable = true;
+        continue;
+      }
+
+      if (inTable && /^Totale/i.test(line)) {
+        inTable = false;
+        continue;
+      }
+
+      if (!inTable) continue;
+      if (!line || line.length < 10) continue;
+
+      const parts = line.split(/\s+/);
+      if (parts.length < 4) continue;
+
+      const partita = parts[0];
+      const lotto = parts[1];
+      const rotelle = parseInt(parts[2], 10);
+      const pesoTxt = parts.slice(3).join("");
+
+      if (!/^[A-Z0-9]{6,}$/i.test(partita)) continue;
+      if (isNaN(rotelle) || rotelle < 1) continue;
+
+      items.push({
+        partita_lotto: partita,
+        lotto: lotto || null,
+        numero_rotelle: rotelle,
+        peso: itParse(pesoTxt) || 0,
+      });
+    }
+
+    return items;
+  }
+
   classifyDocument(text) {
-    const destSection = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,600}?(?=\n\s*\n|VETTORE|MERCE|$)/i);
-    const d = destSection ? destSection[0] : text;
-    const mittSection = text.match(/(?:LUOGO\s*SPEDIZIONE|que\s*\w+|UNION|Cartiera)[\s\S]{0,600}?(?=\s*CPT|\s*DESTINATARIO|\s*$)/i);
-    const m = mittSection ? mittSection[0] : text;
-    if (/logistic\s*solution|soffass/i.test(d)) return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
-    if (/logistic\s*solution|soffass/i.test(m)) return { tipo: "USCITA", motivazione: "Mittente Logistic Solution" };
-    if (/logistic\s*solution|soffass/i.test(text)) return { tipo: "ENTRATA", motivazione: "Trovato Logistic Solution nel testo" };
+    if (/logistic\s*solution|soffass/i.test(text)) {
+      if (/DESTINATARIO[\s\S]{0,200}?(?:logistic\s*solution|soffass)/i.test(text)) {
+        return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
+      }
+      return { tipo: "ENTRATA", motivazione: "Trovato Logistic Solution/Soffass nel testo" };
+    }
     return { tipo: null, motivazione: "Non determinabile" };
   }
 
