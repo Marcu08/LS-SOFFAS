@@ -51,13 +51,18 @@ async function processOcrBackground({ id, pdfPath, userId }) {
     console.log(`[OCR] Starting Tesseract CLI OCR for ${id}`);
     const { images, pageDir } = await PdfService.convertToImages(pdfPath, 200);
 
-    const imagePath = images[0];
-    const ocrText = await tesseractCli.recognize(imagePath);
+    const chunks = [];
+    for (let i = 0; i < images.length; i++) {
+      console.log(`[OCR] Page ${i + 1}/${images.length}`);
+      const text = await tesseractCli.recognize(images[i]);
+      chunks.push(`=== PAGE ${i + 1} ===\n${text}`);
+    }
     PdfService.cleanup(pageDir);
 
+    const ocrText = chunks.join("\n\n");
     if (!ocrText) throw new Error("OCR non ha prodotto testo");
 
-    console.log(`[OCR] Text length: ${ocrText.length} chars`);
+    console.log(`[OCR] Total pages: ${images.length}, Text length: ${ocrText.length} chars`);
     console.log(`[OCR] First 500 chars:`, ocrText.substring(0, 500));
 
     const parsed = ocrService.processText(ocrText);
