@@ -74,93 +74,64 @@ const UploadWizard = {
     prog.innerHTML = `
       <div style="text-align:center;padding:16px;">
         <div class="loading-spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:4px;"></div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Preparazione documento...</div>
-        <div class="ocr-step" style="font-size:12px;color:var(--gray-500);line-height:1.8;">
-          <div class="ocr-step-1">🔄 Conversione PDF in immagine...</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Analisi documento in corso...</div>
+        <div style="font-size:12px;color:var(--gray-500);line-height:1.8;">
+          <div>✔ PDF caricato</div>
+          <div id="ocr-status">🔄 Riconoscimento testo...</div>
+          <div>⏳ Estrazione dati...</div>
+          <div>⏳ Validazione...</div>
         </div>
+        <div class="status-text" style="font-size:12px;color:var(--gray-400);margin-top:8px;">Elaborazione in corso...</div>
       </div>
     `;
 
     try {
       const res = await App.api("/documenti/raw/" + this.rawId + "/process", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message);
-
-      await this.runBrowserOcr(data.imageData);
+      if (res.status !== 202) {
+        const data = await res.json();
+        throw new Error(data.error || data.message);
+      }
+      await this.pollForResult();
     } catch (e) {
       this.renderError("Elaborazione fallita", e.message);
     }
   },
 
-  async runBrowserOcr(imageData) {
+  async pollForResult() {
     const prog = document.getElementById("wiz-progress");
-    prog.innerHTML = `
-      <div style="text-align:center;padding:16px;">
-        <div class="loading-spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:4px;"></div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Riconoscimento testo in corso...</div>
-        <div class="ocr-step" style="font-size:12px;color:var(--gray-500);line-height:1.8;">
-          <div id="ocr-status">Preparazione immagine...</div>
-          <div id="ocr-progress" style="margin-top:8px;height:4px;background:var(--gray-200);border-radius:2px;overflow:hidden;">
-            <div id="ocr-progress-bar" style="height:100%;width:0%;background:var(--primary);transition:width 0.3s;"></div>
-          </div>
-        </div>
-      </div>
-    `;
+    let dots = 0;
 
-    try {
-      const img = new Image();
-      img.src = imageData;
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = () => reject(new Error("Impossibile caricare l'immagine"));
-      });
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      canvas.getContext("2d").drawImage(img, 0, 0);
+    while (true) {
+      await new Promise(r => setTimeout(r, 2000));
 
-      const worker = await Tesseract.createWorker("ita", 1, {
-        logger: (m) => {
-          const status = document.getElementById("ocr-status");
-          const bar = document.getElementById("ocr-progress-bar");
-          if (status) status.textContent = m.status + (m.progress ? " (" + Math.round(m.progress * 100) + "%)" : "");
-          if (bar && m.progress) bar.style.width = Math.round(m.progress * 100) + "%";
-        },
-      });
-      const { data } = await worker.recognize(canvas);
-      await worker.terminate();
+      try {
+        const res = await App.api("/documenti/raw/" + this.rawId);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
 
-      const ocrText = data.text;
-      const confidence = Math.round(data.confidence);
+        if (data.stato === "needs_review" || data.stato === "ready_to_confirm") {
+          this.ocrData = data.dati_estratti || {};
+          this.validation = data.validation || {};
+          this.duplicate = data.duplicate || { duplicate: false };
+          this.warnings = (data.validation?.warnings || []).slice();
+          if (data.duplicate?.duplicate) {
+            this.warnings.push("Duplicato: bolla #" + (data.dati_estratti?.numero_bolla || "") + " già presente");
+          }
+          this.renderPreview();
+          return;
+        }
 
-      document.getElementById("ocr-status").textContent = "OCR completato (" + confidence + "%)";
+        if (data.stato === "error") {
+          this.renderError("OCR fallito", data.error_message || "Errore sconosciuto", () => this.startProcessing());
+          return;
+        }
 
-      await this.sendOcrResult(ocrText);
-    } catch (e) {
-      this.renderError("OCR fallito nel browser", e.message);
-    }
-  },
-
-  async sendOcrResult(ocrText) {
-    const prog = document.getElementById("wiz-progress");
-    prog.querySelector(".ocr-step").innerHTML = `<div>✔ OCR completato</div><div>🔄 Invio risultati al server...</div>`;
-
-    try {
-      const res = await App.api("/documenti/raw/" + this.rawId + "/ocr-result", {
-        method: "POST",
-        body: JSON.stringify({ ocr_raw_text: ocrText }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message);
-
-      this.ocrData = data.data || {};
-      this.validation = data.validation || {};
-      this.duplicate = data.duplicate || { duplicate: false };
-      this.warnings = data.warnings || [];
-
-      this.renderPreview();
-    } catch (e) {
-      this.renderError("Invio risultati fallito", e.message);
+        dots = (dots + 1) % 4;
+        const st = prog.querySelector(".status-text");
+        if (st) st.textContent = "Elaborazione in corso" + ".".repeat(dots);
+      } catch (e) {
+        console.error("Poll error:", e);
+      }
     }
   },
 

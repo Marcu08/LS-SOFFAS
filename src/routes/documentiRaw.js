@@ -10,6 +10,7 @@ const SanitizationService = require("../services/sanitizationService");
 const ValidationService = require("../services/validationService");
 const DuplicateService = require("../services/duplicateService");
 const PdfService = require("../services/pdfService");
+const tesseractCli = require("../services/tesseractCliService");
 
 router.post("/upload", auth, async (req, res) => {
   try {
@@ -45,6 +46,59 @@ router.post("/upload", auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+async function processOcrBackground({ id, pdfPath, userId }) {
+  try {
+    console.log(`[OCR] Starting Tesseract CLI OCR for ${id}`);
+    const { images, pageDir } = await PdfService.convertToImages(pdfPath, 200);
+
+    const imagePath = images[0];
+    const ocrText = await tesseractCli.recognize(imagePath);
+    PdfService.cleanup(pageDir);
+
+    if (!ocrText) throw new Error("OCR non ha prodotto testo");
+
+    const parsed = ocrService.processText(ocrText);
+    const confidence = 90;
+    const sanitized = SanitizationService.applicaAll(parsed);
+    const validation = ValidationService.validate(sanitized, { confidence });
+    const duplicateCheck = await DuplicateService.check(sanitized);
+
+    const warnings = [];
+    if (validation.warnings) warnings.push(...validation.warnings);
+    if (duplicateCheck.duplicate) {
+      warnings.push(`Duplicato: bolla #${sanitized.numero_bolla} già presente (${duplicateCheck.scenario})`);
+    }
+
+    const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
+    const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
+
+    await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
+    await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
+
+    const { error: updateErr } = await supabaseAdmin
+      .from("documenti_raw")
+      .update({
+        ocr_raw_text: sanitized.ocr_raw_text,
+        ocr_confidence: confidence,
+        dati_estratti: sanitized,
+        stato: nextState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (updateErr) throw new Error("DB update: " + updateErr.message);
+    console.log(`[OCR] Completed for ${id} -> ${nextState}`);
+  } catch (err) {
+    console.error(`[OCR] Error for ${id}:`, err.message);
+    try {
+      await DocumentStateService.transition({ id, action: "fail", userId, meta: { error: err.message } });
+      await supabaseAdmin.from("documenti_raw").update({
+        stato: "error", error_message: err.message, updated_at: new Date().toISOString(),
+      }).eq("id", id);
+    } catch (e) { console.error("Failed to update error state:", e); }
+  }
+}
+
 router.post("/raw/:id/process", auth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,89 +113,13 @@ router.post("/raw/:id/process", auth, async (req, res) => {
     if (raw.stato !== "uploaded") return res.status(400).json({ error: "Documento già elaborato" });
 
     await DocumentStateService.transition({ id, action: "process", userId: req.user?.id });
+    await supabaseAdmin.from("documenti_raw").update({
+      stato: "processing", updated_at: new Date().toISOString(),
+    }).eq("id", id);
 
-    const { images, pageDir } = await PdfService.convertToImages(raw.pdf_path, 72);
+    processOcrBackground({ id, pdfPath: raw.pdf_path, userId: req.user?.id });
 
-    const imagePath = images[0];
-    const imageBuffer = fs.readFileSync(imagePath);
-    const imageBase64 = imageBuffer.toString("base64");
-    const mimeType = imagePath.endsWith(".jpg") ? "image/jpeg" : "image/png";
-    const imageData = "data:" + mimeType + ";base64," + imageBase64;
-
-    PdfService.cleanup(pageDir);
-
-    const { error: updateErr } = await supabaseAdmin
-      .from("documenti_raw")
-      .update({ stato: "processing", updated_at: new Date().toISOString() })
-      .eq("id", id);
-
-    if (updateErr) return res.status(500).json({ error: "Errore aggiornamento: " + updateErr.message });
-
-    res.json({
-      message: "PDF convertito, pronto per OCR lato browser",
-      raw_id: id,
-      imageData,
-      pageCount: images.length,
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post("/raw/:id/ocr-result", auth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { ocr_raw_text } = req.body;
-
-    if (!ocr_raw_text) return res.status(400).json({ error: "Testo OCR mancante" });
-
-    const { data: raw } = await supabaseAdmin
-      .from("documenti_raw")
-      .select("id, stato")
-      .eq("id", id)
-      .single();
-
-    if (!raw) return res.status(404).json({ error: "Documento non trovato" });
-    if (raw.stato !== "processing") return res.status(400).json({ error: "Documento non in elaborazione" });
-
-    const parsed = ocrService.processText(ocr_raw_text);
-    const confidence = parsed.ocr_results?.[0]?.confidence || 0;
-    const sanitized = SanitizationService.applicaAll(parsed);
-    const validation = ValidationService.validate(sanitized, { confidence });
-    const duplicateCheck = await DuplicateService.check(sanitized);
-
-    const warnings = [];
-    if (validation.warnings) warnings.push(...validation.warnings);
-    if (duplicateCheck.duplicate) {
-      warnings.push(`Duplicato: bolla #${sanitized.numero_bolla} già presente (${duplicateCheck.scenario})`);
-    }
-
-    const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
-    const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
-
-    await DocumentStateService.transition({ id, action: "complete", userId: req.user?.id, meta: { confidence } });
-    await DocumentStateService.transition({ id, action: nextAction, userId: req.user?.id, meta: { confidence, warnings } });
-
-    const { error: updateErr } = await supabaseAdmin
-      .from("documenti_raw")
-      .update({
-        ocr_raw_text: sanitized.ocr_raw_text,
-        ocr_confidence: confidence,
-        dati_estratti: sanitized,
-        stato: nextState,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (updateErr) return res.status(500).json({ error: "Errore salvataggio: " + updateErr.message });
-
-    res.json({
-      message: "OCR completato",
-      raw_id: id,
-      stato: nextState,
-      data: sanitized,
-      validation,
-      duplicate: duplicateCheck,
-      warnings,
-    });
+    res.status(202).json({ message: "Elaborazione avviata", raw_id: id, stato: "processing" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

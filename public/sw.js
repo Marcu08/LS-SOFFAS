@@ -1,5 +1,5 @@
-﻿const CACHE_API = "ls-soffass-api-v3";
-const CACHE_ASSETS = "ls-soffass-assets-v3";
+﻿const CACHE_API = "ls-soffass-api-v4";
+const CACHE_ASSETS = "ls-soffass-assets-v4";
 
 const PRECACHE_ASSETS = [
   "/css/style.css",
