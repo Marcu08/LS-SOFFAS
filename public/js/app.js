@@ -5,11 +5,12 @@ const App = {
     token: null,
     user: null,
     currentPage: "dashboard",
-    pages: ["dashboard", "ingresso", "giacenze", "movimenti", "export"],
+    pages: ["dashboard", "ingresso", "giacenze", "import", "movimenti", "export"],
     pageTitles: {
       dashboard: "Dashboard",
       ingresso: "Nuova Bolla",
       giacenze: "Giacenze",
+      import: "Import Excel",
       movimenti: "Movimenti",
       export: "Esporta Dati",
     },
@@ -153,6 +154,9 @@ const App = {
         break;
       case "giacenze":
         Giacenze.render(content);
+        break;
+      case "import":
+        ImportGiacenze.render(content);
         break;
       case "movimenti":
         Movimenti.render(content);
