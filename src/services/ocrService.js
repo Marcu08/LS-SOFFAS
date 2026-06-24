@@ -62,7 +62,10 @@ class OcrService {
       data.destinatario = destMatch[1].replace(/\s+\d+\s*$/, "").replace(/\s*SECONDO.*$/, "").trim();
     }
 
-    const artLine = text.match(/((?=[A-Z0-9]*[A-Z])[A-Z0-9]{8,24})(?:\s+(\d{6,8}))?\s+(.{5,}?)\s+KG\s+([\d.,]+)(?:\s+(\d+))?/i);
+    let artLine = text.match(/(300652N[A-Z0-9]{5,18})(?:\s+(\d{6,8}))?\s+(.{5,}?)\s+KG\s+([\d.,]+)(?:\s+(\d+))?/i);
+    if (!artLine) {
+      artLine = text.match(/((?=[A-Z0-9]*[A-Z])[A-Z0-9]{8,24})(?:\s+(\d{6,8}))?\s+(.{5,}?)\s+KG\s+([\d.,]+)(?:\s+(\d+))?/i);
+    }
     if (artLine) {
       data.codice_articolo = (artLine[1] + (artLine[2] || "")).trim();
       data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();

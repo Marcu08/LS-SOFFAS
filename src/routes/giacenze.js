@@ -1,6 +1,9 @@
 ﻿const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
+const Excel = require("exceljs");
+const path = require("path");
+const fs = require("fs");
 
 router.get("/", auth, async (req, res) => {
   try {
@@ -67,6 +70,76 @@ router.get("/riepilogo", auth, async (req, res) => {
       totale_documenti: totaleDoc || 0,
       ultimi_movimenti: ultimiMov || [],
         raggruppamento_picking: Object.values(gruppiPicking),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/import-excel", auth, async (req, res) => {
+  try {
+    const upload = req.app.locals.upload;
+    upload.single("file")(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: "Nessun file Excel caricato" });
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (ext !== ".xlsx" && ext !== ".xls") {
+        return res.status(400).json({ error: "Il file deve essere un Excel (.xlsx)" });
+      }
+
+      try {
+        const supabase = req.app.locals.supabase;
+        const wb = new Excel.Workbook();
+        await wb.xlsx.readFile(req.file.path);
+        const ws = wb.worksheets[0];
+        const risultati = { processati: 0, errori: [], aggiornati: [] };
+
+        for (let i = 2; i <= ws.rowCount; i++) {
+          const row = ws.getRow(i);
+          const codArt = String(row.getCell(1).value || "").trim();
+          const descr = String(row.getCell(2).value || "").trim();
+          const qty = parseFloat(row.getCell(3).value) || 0;
+          const colli = parseInt(row.getCell(4).value) || 0;
+          const pallet = parseInt(row.getCell(5).value) || 0;
+
+          if (!codArt || qty <= 0) continue;
+
+          const { data: existing } = await supabase
+            .from("giacenze")
+            .select("*")
+            .eq("codice_articolo", codArt)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from("giacenze").update({
+              peso_totale: qty,
+              colli_totali: colli || existing.colli_totali,
+              pallet_totali: pallet || existing.pallet_totali,
+              descrizione_articolo: descr || existing.descrizione_articolo,
+              ultimo_aggiornamento: new Date().toISOString(),
+            }).eq("id", existing.id);
+          } else {
+            await supabase.from("giacenze").insert({
+              codice_articolo: codArt,
+              descrizione_articolo: descr || "N/A",
+              peso_totale: qty,
+              colli_totali: colli,
+              pallet_totali: pallet,
+            });
+          }
+          risultati.processati++;
+          risultati.aggiornati.push({ codice_articolo: codArt, kg: qty, colli });
+        }
+
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+
+        res.json({
+          message: `Import completato: ${risultati.processati} articoli elaborati`,
+          dettaglio: risultati,
+        });
+      } catch (e) {
+        res.status(500).json({ error: "Errore lettura Excel: " + e.message });
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
