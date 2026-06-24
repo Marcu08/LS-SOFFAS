@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS giacenze (
   peso_totale DECIMAL(12,3) DEFAULT 0,
   pallet_totali INTEGER DEFAULT 0,
   ultimo_aggiornamento TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(picking, codice_articolo)
+  UNIQUE(codice_articolo)
 );
 
 -- MOVIMENTI (storico completo)

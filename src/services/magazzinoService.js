@@ -16,9 +16,11 @@ async function aggiornaGiacenze(supabase, doc, picking) {
   const pallet = doc.pallet || 0;
   const pKey = picking || doc.picking || null;
 
-  let q = supabase.from("giacenze").select("*").eq("codice_articolo", doc.codice_articolo);
-  if (pKey) { q = q.eq("picking", pKey); } else { q = q.is("picking", null); }
-  const { data: existing } = await q.maybeSingle();
+  const { data: existing } = await supabase
+    .from("giacenze")
+    .select("*")
+    .eq("codice_articolo", doc.codice_articolo)
+    .maybeSingle();
 
   if (existing) {
     const nc = doc.tipo === "ENTRATA" ? existing.colli_totali + colli : Math.max(0, existing.colli_totali - colli);
@@ -42,9 +44,10 @@ async function aggiornaGiacenze(supabase, doc, picking) {
 }
 
 async function refreshGiacenze(supabase, codArt, descr, picking) {
-  let q = supabase.from("documenti").select("tipo, colli, peso_totale, pallet").eq("codice_articolo", codArt);
-  if (picking) q = q.eq("picking", picking);
-  const { data: docs } = await q;
+  const { data: docs } = await supabase
+    .from("documenti")
+    .select("tipo, colli, peso_totale, pallet")
+    .eq("codice_articolo", codArt);
 
   let tc = 0, tp = 0, tpa = 0;
   if (docs) docs.forEach((d) => {
@@ -52,9 +55,11 @@ async function refreshGiacenze(supabase, codArt, descr, picking) {
     else { tc -= d.colli || 0; tp -= parseFloat(d.peso_totale || 0); tpa -= d.pallet || 0; }
   });
 
-  let gq = supabase.from("giacenze").select("id").eq("codice_articolo", codArt);
-  if (picking) { gq = gq.eq("picking", picking); } else { gq = gq.is("picking", null); }
-  const { data: existing } = await gq.maybeSingle();
+  const { data: existing } = await supabase
+    .from("giacenze")
+    .select("id")
+    .eq("codice_articolo", codArt)
+    .maybeSingle();
 
   if (existing) {
     const { error } = await supabase.from("giacenze").update({
@@ -65,7 +70,7 @@ async function refreshGiacenze(supabase, codArt, descr, picking) {
   }
 
   const { error } = await supabase.from("giacenze").insert([{
-    codice_articolo: codArt, descrizione_articolo: descr, picking: picking || null,
+    codice_articolo: codArt, descrizione_articolo: descr,
     colli_totali: Math.max(0, tc), peso_totale: Math.max(0, tp), pallet_totali: Math.max(0, tpa),
   }]);
   return error;

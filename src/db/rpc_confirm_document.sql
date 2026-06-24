@@ -78,10 +78,9 @@ BEGIN
     v_picking
   );
 
-  -- 4. Aggiorna giacenza
+  -- 4. Aggiorna giacenza (match per solo codice articolo, stock aggregato)
   SELECT * INTO v_esistente FROM giacenze
-    WHERE codice_articolo = p_dati->>'codice_articolo'
-    AND (v_picking IS NOT NULL AND picking = v_picking OR v_picking IS NULL AND picking IS NULL);
+    WHERE codice_articolo = p_dati->>'codice_articolo';
 
   IF p_dati->>'tipo' = 'ENTRATA' THEN
     v_nuovo_colli := v_colli;
