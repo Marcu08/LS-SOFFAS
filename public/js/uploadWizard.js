@@ -119,8 +119,8 @@ const UploadWizard = {
       canvas.height = img.height;
       canvas.getContext("2d").drawImage(img, 0, 0);
 
-      const worker = await Tesseract.createWorker("ita", 3, {
-        langPath: "/data/",
+      const worker = await Tesseract.createWorker("ita", 1, {
+        langPath: window.location.origin + "/data/",
         cachePath: "/tess-cache",
         logger: (m) => {
           const status = document.getElementById("ocr-status");
