@@ -5,7 +5,7 @@ class OcrService {
   async processDocument(pdfPath) {
     const { images, pageDir } = await PdfService.convertToImages(pdfPath);
     try {
-      const maxPages = images.slice(0, 5);
+      const maxPages = images.slice(0, 1);
       const ocrResults = await TesseractService.recognizeAll(maxPages);
       const allText = ocrResults.map((r) => "=== PAGE " + r.page + " ===\n" + r.text).join("\n\n");
       const parsed = this.parseDocument(allText);

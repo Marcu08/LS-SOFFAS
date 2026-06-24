@@ -1,4 +1,4 @@
-﻿const { execSync } = require("child_process");
+﻿const { execSync, execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -6,9 +6,11 @@ const os = require("os");
 function findPdftoppm() {
   if (os.platform() === "win32") {
     const winPath = "C:\\poppler-26.02.0\\Library\\bin\\pdftoppm.exe";
-    if (fs.existsSync(winPath)) return `"${winPath}"`;
-    const which = execSync("where pdftoppm 2>nul", { stdio: "pipe", encoding: "utf8" }).trim();
-    if (which) return which;
+    if (fs.existsSync(winPath)) return winPath;
+    try {
+      const out = execSync("where pdftoppm 2>nul", { stdio: "pipe", encoding: "utf8" }).trim();
+      if (out) return out;
+    } catch (e) {}
     throw new Error("pdftoppm non trovato su Windows. Installa poppler in C:\\poppler-..");
   }
   try {
@@ -29,9 +31,8 @@ class PdfService {
     fs.mkdirSync(pageDir, { recursive: true });
     const outputPrefix = path.join(pageDir, "page");
     const pdftoppm = findPdftoppm();
-    const cmd = `${pdftoppm} -r ${dpi} -jpeg "${pdfPath}" "${outputPrefix}"`;
     try {
-      execSync(cmd, { timeout: 120000, stdio: "pipe" });
+      execFileSync(pdftoppm, ["-r", String(dpi), "-jpeg", pdfPath, outputPrefix], { timeout: 30000, stdio: "pipe" });
     } catch (e) { throw new Error("Errore conversione PDF: " + e.message); }
     const images = fs.readdirSync(pageDir).filter((f) => f.endsWith(".jpg")).sort().map((f) => path.join(pageDir, f));
     if (images.length === 0) throw new Error("Nessuna immagine generata dal PDF");

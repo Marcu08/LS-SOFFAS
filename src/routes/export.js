@@ -34,7 +34,7 @@ async function styleSheet(ws, totalsRow) {
 router.get("/giacenze", auth, async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
-    const { data: giacenze } = await supabase.from("giacenze").select("*").order("codice_articolo");
+    const { data: giacenze } = await supabase.from("giacenze").select("*").order("codice_articolo").limit(10000);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "Gestionale LS SOFFASS";
@@ -81,7 +81,7 @@ router.get("/movimenti", auth, async (req, res) => {
     let query = supabase.from("movimenti").select("*").order("data_movimento", { ascending: false });
     if (from) query = query.gte("data_movimento", from);
     if (to) query = query.lte("data_movimento", to);
-    const { data: movimenti } = await query;
+    const { data: movimenti } = await query.limit(10000);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "Gestionale LS SOFFASS";
@@ -127,7 +127,7 @@ router.get("/movimenti", auth, async (req, res) => {
 router.get("/pallet", auth, async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
-    const { data: documenti } = await supabase.from("documenti").select("*").order("data_documento");
+    const { data: documenti } = await supabase.from("documenti").select("*").order("data_documento").limit(10000);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "Gestionale LS SOFFASS";
@@ -200,7 +200,7 @@ router.get("/documenti", auth, async (req, res) => {
     if (from) query = query.gte("data_documento", from);
     if (to) query = query.lte("data_documento", to);
     if (tipo) query = query.eq("tipo", tipo);
-    const { data: documenti } = await query;
+    const { data: documenti } = await query.limit(10000);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "Gestionale LS SOFFASS";

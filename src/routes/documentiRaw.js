@@ -16,7 +16,7 @@ router.post("/upload", auth, async (req, res) => {
     upload.single("pdf")(req, res, async (err) => {
       if (err) return res.status(400).json({ error: "Errore upload: " + err.message });
       if (!req.file) return res.status(400).json({ error: "Nessun file PDF caricato" });
-      if (path.extname(req.file.originalname).toLowerCase() !== ".pdf") {
+      if (path.extname(req.file.originalname).toLowerCase() !== ".pdf" || !req.file.mimetype.includes("pdf")) {
         return res.status(400).json({ error: "Il file deve essere un PDF" });
       }
 
@@ -200,73 +200,22 @@ router.post("/raw/:id/confirm", auth, async (req, res) => {
       return res.status(400).json({ error: "Documento non pronto per la conferma (stato: " + raw.stato + ")" });
     }
 
-    const data = raw.dati_estratti;
-    if (!data) return res.status(400).json({ error: "Nessun dato estratto" });
+    if (!raw.dati_estratti) return res.status(400).json({ error: "Nessun dato estratto" });
 
-    const picking = data.picking || data.numero_ordine || null;
+    const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc("confirm_document", {
+      p_raw_id: id,
+      p_dati: raw.dati_estratti,
+      p_ocr_raw_text: raw.ocr_raw_text,
+      p_ocr_confidence: raw.ocr_confidence,
+      p_user_id: req.user.id,
+    });
 
-    const docData = {
-      tipo: data.tipo, numero_bolla: data.numero_bolla,
-      numero_documento: data.numero_documento || null,
-      numero_ordine: data.numero_ordine || null,
-      numero_packing_list: data.numero_packing_list || null,
-      picking: picking,
-      data_documento: data.data_documento,
-      data_carico: data.data_carico || null,
-      causale_trasporto: data.causale_trasporto || null,
-      mittente: data.mittente || null,
-      destinatario: data.destinatario || null,
-      codice_articolo: data.codice_articolo,
-      descrizione_articolo: data.descrizione_articolo,
-      um: data.um || "KG", quantita: data.quantita || 0,
-      colli: data.colli || 0, peso_totale: data.peso_totale || data.quantita || 0,
-      pallet: data.pallet || 0, note: data.note || null,
-      ocr_raw_text: raw.ocr_raw_text || null,
-      stato: "confirmed",
-      confirmed_at: new Date().toISOString(),
-      confirmed_by: req.user.id,
-      raw_document_id: id,
-      created_by: req.user.id,
-    };
+    if (rpcErr) return res.status(500).json({ error: "Errore conferma documento: " + rpcErr.message });
 
-    const { data: doc, error: docErr } = await supabaseAdmin
-      .from("documenti")
-      .insert([{ ...docData, created_at: new Date().toISOString() }])
-      .select()
-      .single();
-
-    if (docErr) return res.status(500).json({ error: "Errore creazione documento: " + docErr.message });
-
-    const movErr = await creaMovimento(supabaseAdmin, doc, picking);
-    if (movErr) {
-      await supabaseAdmin.from("documenti").delete().eq("id", doc.id);
-      return res.status(500).json({ error: "Errore creazione movimento: " + movErr.message });
-    }
-
-    const giacErr = await aggiornaGiacenze(supabaseAdmin, doc, picking);
-    if (giacErr) {
-      await supabaseAdmin.from("movimenti").delete().eq("documento_id", doc.id);
-      await supabaseAdmin.from("documenti").delete().eq("id", doc.id);
-      return res.status(500).json({ error: "Errore aggiornamento giacenze: " + giacErr.message });
-    }
-
-    const dettaglio = data.dettaglio || [];
-    if (dettaglio.length > 0) {
-      const dd = dettaglio.map((d, i) => ({
-        documento_id: doc.id, partita_lotto: d.partita_lotto || null,
-        numero_rotelle: d.numero_rotelle || 0, peso: d.peso || 0, posizione: i + 1,
-      }));
-      const { error: detErr } = await supabaseAdmin.from("dettaglio_documenti").insert(dd);
-      if (detErr) {
-        await supabaseAdmin.from("dettaglio_documenti").delete().eq("documento_id", doc.id);
-        await supabaseAdmin.from("movimenti").delete().eq("documento_id", doc.id);
-        await supabaseAdmin.from("documenti").delete().eq("id", doc.id);
-        return res.status(500).json({ error: "Errore salvataggio dettaglio: " + detErr.message });
-      }
-    }
+    const docId = rpcResult.id;
 
     await DocumentStateService.transition({
-      id, action: "confirm", userId: req.user?.id, meta: { documento_id: doc.id },
+      id, action: "confirm", userId: req.user?.id, meta: { documento_id: docId },
     });
 
     const { error: rawUpdateErr } = await supabaseAdmin
@@ -275,6 +224,8 @@ router.post("/raw/:id/confirm", auth, async (req, res) => {
       .eq("id", id);
 
     if (rawUpdateErr) console.error("Errore aggiornamento raw dopo confirmed:", rawUpdateErr.message);
+
+    const { data: doc } = await supabaseAdmin.from("documenti").select("*").eq("id", docId).single();
 
     res.json({ message: "Documento confermato", documento: doc, raw_id: id });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -345,48 +296,5 @@ router.get("/raw", auth, async (req, res) => {
     res.json({ documenti: data, total: count, page: parseInt(page), limit: parseInt(limit) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-async function creaMovimento(supabase, doc, picking) {
-  const pKey = picking || doc.picking || null;
-  const { error } = await supabase.from("movimenti").insert([{
-    documento_id: doc.id, tipo: doc.tipo, codice_articolo: doc.codice_articolo,
-    descrizione_articolo: doc.descrizione_articolo, colli: doc.colli || 0,
-    peso: doc.peso_totale || doc.quantita || 0, pallet: doc.pallet || 0,
-    data_movimento: doc.data_documento, numero_bolla: doc.numero_bolla,
-    picking: pKey,
-  }]);
-  return error;
-}
-
-async function aggiornaGiacenze(supabase, doc, picking) {
-  const colli = doc.colli || 0;
-  const peso = parseFloat(doc.peso_totale || doc.quantita || 0);
-  const pallet = doc.pallet || 0;
-  const pKey = picking || doc.picking || null;
-
-  let q = supabase.from("giacenze").select("*").eq("codice_articolo", doc.codice_articolo);
-  if (pKey) { q = q.eq("picking", pKey); } else { q = q.is("picking", null); }
-  const { data: existing } = await q.maybeSingle();
-
-  if (existing) {
-    const nc = doc.tipo === "ENTRATA" ? existing.colli_totali + colli : Math.max(0, existing.colli_totali - colli);
-    const np = doc.tipo === "ENTRATA" ? parseFloat(existing.peso_totale) + peso : Math.max(0, parseFloat(existing.peso_totale) - peso);
-    const npa = doc.tipo === "ENTRATA" ? existing.pallet_totali + pallet : Math.max(0, existing.pallet_totali - pallet);
-    const { error } = await supabase.from("giacenze").update({
-      colli_totali: nc, peso_totale: Math.round(np * 1000) / 1000, pallet_totali: npa,
-      ultimo_aggiornamento: new Date().toISOString()
-    }).eq("id", existing.id);
-    return error;
-  }
-
-  const { error } = await supabase.from("giacenze").insert([{
-    codice_articolo: doc.codice_articolo, descrizione_articolo: doc.descrizione_articolo,
-    picking: pKey,
-    colli_totali: doc.tipo === "ENTRATA" ? colli : 0,
-    peso_totale: doc.tipo === "ENTRATA" ? peso : 0,
-    pallet_totali: doc.tipo === "ENTRATA" ? pallet : 0,
-  }]);
-  return error;
-}
 
 module.exports = router;

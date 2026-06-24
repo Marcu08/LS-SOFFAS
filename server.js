@@ -63,7 +63,7 @@ app.get("*", (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: err.message || "Errore interno" });
+  res.status(500).json({ error: "Errore interno del server" });
 });
 
 app.listen(PORT, "0.0.0.0", () => {
