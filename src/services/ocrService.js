@@ -95,14 +95,20 @@ class OcrService {
     }
 
     if (!data.peso_totale) {
-      const kgRow = text.match(/TOTALEPESOUNITA[^0-9]*KG\s+([\d.,]+)/i);
+      const kgRow = text.match(/TOTALE\s*PESO[^0-9]*KG\s*[_\s]*([\d.,]+)/i);
       if (kgRow) data.peso_totale = itParse(kgRow[1]);
     }
 
     if (!data.peso_totale) {
-      const kgVals = [...text.matchAll(/(?:KG|PESO)\s+(\d{1,3}(?:[.,]\s?\d{3})*(?:[.,]\d+)?)/gi)];
-      if (kgVals.length > 0) {
-        data.peso_totale = itParse(kgVals[kgVals.length - 1][1]);
+      const punit = text.match(/TOTALE\s*PESO\s*UNITA[^0-9]*KG\s+([\d.,]+)/i);
+      if (punit) data.peso_totale = itParse(punit[1]);
+    }
+
+    if (!data.peso_totale) {
+      const kgVals = [...text.matchAll(/(?:KG|PESO)\s*[_\s]*(\d{1,3}(?:[.,]\s?\d{3})*(?:[.,]\d+)?)/gi)];
+      const nonZero = kgVals.map(v => itParse(v[1])).filter(v => v && v > 0);
+      if (nonZero.length > 0) {
+        data.peso_totale = nonZero[nonZero.length - 1];
       }
     }
 
@@ -112,7 +118,7 @@ class OcrService {
     }
 
     if (data.colli === null || data.colli === undefined) {
-      const unitMatch = text.match(/Units?\s*(\d+)/i);
+      const unitMatch = text.match(/(?:Units?|uns)\s*[:]?\s*(\d+)/i) || text.match(/(\d+)\s*uns/i);
       if (unitMatch) data.colli = parseInt(unitMatch[1], 10);
     }
 
