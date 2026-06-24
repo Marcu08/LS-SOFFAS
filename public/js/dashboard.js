@@ -57,7 +57,7 @@
                   <tr>
                     <td>${App.formatDate(d.created_at)}</td>
                     <td style="font-size:12px;color:var(--danger);">${d.error_message || 'Errore sconosciuto'}</td>
-                    <td><button class="btn btn-sm btn-warning" onclick="UploadWizard.retryRaw('${d.id}')">Riprova</button></td>
+                    <td><button class="btn btn-sm btn-warning" onclick="Dashboard.retryRaw('${d.id}')">Riprova</button></td>
                   </tr>
                 `).join("")}
               </tbody>
