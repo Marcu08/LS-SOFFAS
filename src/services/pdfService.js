@@ -25,7 +25,7 @@ function findPdftoppm() {
 }
 
 class PdfService {
-  async convertToImages(pdfPath, dpi = 100) {
+  async convertToImages(pdfPath, dpi = 72) {
     const pdfName = path.basename(pdfPath, path.extname(pdfPath));
     const pageDir = path.join(__dirname, "../../uploads/temp_images", pdfName + "_" + Date.now());
     fs.mkdirSync(pageDir, { recursive: true });

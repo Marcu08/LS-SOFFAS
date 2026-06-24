@@ -45,42 +45,60 @@ router.post("/upload", auth, async (req, res) => {
 });
 
 async function processOcrBackground({ id, pdfPath, userId }) {
+  const timeout = 120000;
+  const startTime = Date.now();
+
   try {
-    const ocrRaw = await ocrService.processDocument(pdfPath);
+    console.log(`[OCR] Starting background OCR for ${id}, timeout ${timeout}ms`);
 
-    const confidence = ocrRaw.ocr_results?.[0]?.confidence || 0;
-    const sanitized = SanitizationService.applicaAll(ocrRaw);
-    const validation = ValidationService.validate(sanitized, { confidence });
-    const duplicateCheck = await DuplicateService.check(sanitized);
+    const ocrPromise = (async () => {
+      console.log(`[OCR] Step 1: convertToImages for ${id}`);
+      const ocrRaw = await ocrService.processDocument(pdfPath);
+      console.log(`[OCR] Step 2: OCR completed for ${id}`);
 
-    const warnings = [];
-    if (validation.warnings) warnings.push(...validation.warnings);
-    if (duplicateCheck.duplicate) {
-      warnings.push(`Duplicato: bolla #${sanitized.numero_bolla} già presente (${duplicateCheck.scenario})`);
-    }
+      const confidence = ocrRaw.ocr_results?.[0]?.confidence || 0;
+      const sanitized = SanitizationService.applicaAll(ocrRaw);
+      const validation = ValidationService.validate(sanitized, { confidence });
+      const duplicateCheck = await DuplicateService.check(sanitized);
 
-    const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
-    const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
+      const warnings = [];
+      if (validation.warnings) warnings.push(...validation.warnings);
+      if (duplicateCheck.duplicate) {
+        warnings.push(`Duplicato: bolla #${sanitized.numero_bolla} già presente (${duplicateCheck.scenario})`);
+      }
 
-    await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
-    await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
+      const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
+      const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
 
-    const { error: updateErr } = await supabaseAdmin
-      .from("documenti_raw")
-      .update({
-        ocr_raw_text: sanitized.ocr_raw_text,
-        ocr_confidence: confidence,
-        dati_estratti: sanitized,
-        stato: nextState,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
+      await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
+      await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
 
-    if (updateErr) {
-      await DocumentStateService.transition({ id, action: "fail", userId, meta: { error: updateErr.message } });
-    }
+      const { error: updateErr } = await supabaseAdmin
+        .from("documenti_raw")
+        .update({
+          ocr_raw_text: sanitized.ocr_raw_text,
+          ocr_confidence: confidence,
+          dati_estratti: sanitized,
+          stato: nextState,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (updateErr) throw new Error("DB update error: " + updateErr.message);
+
+      console.log(`[OCR] Completed for ${id} in ${Date.now() - startTime}ms -> ${nextState}`);
+      return { sanitized, validation, duplicateCheck, warnings };
+    })();
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`OCR timeout after ${timeout}ms`)), timeout)
+    );
+
+    ocrPromise.catch((e) => console.error(`[OCR] Late error for ${id} (after race):`, e.message));
+
+    await Promise.race([ocrPromise, timeoutPromise]);
   } catch (err) {
-    console.error("Async OCR error:", err);
+    console.error(`[OCR] Error for ${id}:`, err.message);
     try {
       await DocumentStateService.transition({ id, action: "fail", userId, meta: { error: err.message } });
       await supabaseAdmin.from("documenti_raw").update({
