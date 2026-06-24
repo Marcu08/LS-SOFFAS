@@ -137,4 +137,12 @@ class OcrService {
     return { tipo: null, motivazione: "Non determinabile" };
   }
 }
+  processText(ocrRawText) {
+    const parsed = this.parseDocument(ocrRawText);
+    parsed.ocr_raw_text = ocrRawText;
+    parsed.ocr_results = [{ page: 1, confidence: 0 }];
+    parsed.tipo = this.classifyDocument(ocrRawText).tipo;
+    return parsed;
+  }
+}
 module.exports = new OcrService();
