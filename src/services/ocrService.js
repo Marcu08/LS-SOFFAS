@@ -51,8 +51,10 @@ class OcrService {
     data.numero_ordine = m(/N\.?\s*ORD\.?\s*ACQ[^0-9]*(\d{6,15})/i);
     data.causale_trasporto = m(/CAUSALE\s*TRASPORTO[^A-Z]*(\S+)/i);
 
-    const bolla = m(/(?:NUMERO\s*(?:BOLLA|DDT|DOCUMENTO|TRASPORTO))\s*[:.\s]*(\d{6,15})/i);
-    data.numero_bolla = bolla || m(/\b(\d{10})\b/);
+    const bolla = m(/(?:NUMERO\s*(?:BOLLA|DDT|DOCUMENTO|TRASPORTO))\s*[:.\s]*(\d{6,15})/i) ||
+                  m(/DOCUMENTO\s*DI\s*TRASPORTO[\s\S]{0,100}?\b(\d{10})\b/i) ||
+                  m(/\b(\d{10})\b/);
+    data.numero_bolla = bolla;
 
     data.numero_documento = m(/numeno\s*rrasronto[\s_]*(\d+)/i) || data.numero_bolla;
 

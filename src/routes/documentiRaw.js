@@ -49,7 +49,7 @@ router.post("/upload", auth, async (req, res) => {
 async function processOcrBackground({ id, pdfPath, userId }) {
   try {
     console.log(`[OCR] Starting Tesseract CLI OCR for ${id}`);
-    const { images, pageDir } = await PdfService.convertToImages(pdfPath, 200);
+    const { images, pageDir } = await PdfService.convertToImages(pdfPath, 300);
 
     const chunks = [];
     for (let i = 0; i < images.length; i++) {
