@@ -120,8 +120,6 @@ const UploadWizard = {
       canvas.getContext("2d").drawImage(img, 0, 0);
 
       const worker = await Tesseract.createWorker("ita", 1, {
-        langPath: window.location.origin + "/data/",
-        cachePath: "/tess-cache",
         logger: (m) => {
           const status = document.getElementById("ocr-status");
           const bar = document.getElementById("ocr-progress-bar");
