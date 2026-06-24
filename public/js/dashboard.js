@@ -34,7 +34,8 @@
                     <td>${App.formatDate(d.created_at)}</td>
                     <td><span class="badge badge-warning">${d.stato}</span></td>
                     <td style="font-size:12px;color:var(--gray-500);">${d.error_message || 'In attesa'}</td>
-                    <td><button class="btn btn-sm btn-primary" onclick="UploadWizard.render(document.getElementById('app-content'), '${d.id}')">Revisiona</button></td>
+                    <td><button class="btn btn-sm btn-primary" onclick="UploadWizard.render(document.getElementById('app-content'), '${d.id}')">Revisiona</button>
+                    <button class="btn btn-sm btn-danger" style="margin-left:4px;" onclick="Dashboard.deleteRaw('${d.id}')" title="Elimina">✕</button></td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -57,7 +58,8 @@
                   <tr>
                     <td>${App.formatDate(d.created_at)}</td>
                     <td style="font-size:12px;color:var(--danger);">${d.error_message || 'Errore sconosciuto'}</td>
-                    <td><button class="btn btn-sm btn-warning" onclick="Dashboard.retryRaw('${d.id}')">Riprova</button></td>
+                    <td><button class="btn btn-sm btn-warning" onclick="Dashboard.retryRaw('${d.id}')">Riprova</button>
+                    <button class="btn btn-sm btn-danger" style="margin-left:4px;" onclick="Dashboard.deleteRaw('${d.id}')" title="Elimina">✕</button></td>
                   </tr>
                 `).join("")}
               </tbody>
@@ -134,6 +136,19 @@ Dashboard.retryRaw = async function (id) {
     if (!res.ok) throw new Error(data.error);
     App.toast("Documento resettato, riprova l'OCR", "info");
     UploadWizard.render(document.getElementById("app-content"), id);
+  } catch (e) {
+    App.toast("Errore: " + e.message, "error");
+  }
+};
+
+Dashboard.deleteRaw = async function (id) {
+  if (!confirm("Eliminare questo documento?")) return;
+  try {
+    const res = await App.api("/documenti/raw/" + id, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    App.toast("Documento eliminato", "success");
+    Dashboard.render(document.getElementById("app-content"));
   } catch (e) {
     App.toast("Errore: " + e.message, "error");
   }

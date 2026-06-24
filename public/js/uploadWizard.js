@@ -260,6 +260,7 @@ const UploadWizard = {
         </form>
         <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
           <button class="btn btn-outline" onclick="UploadWizard.toggleRawText()">📄 OCR Grezzo</button>
+          <button class="btn btn-danger" onclick="UploadWizard.deleteDoc()">✕ Elimina</button>
           <button class="btn btn-outline" onclick="UploadWizard.cancel()">Annulla</button>
           <button class="btn btn-primary" id="pw-confirm-btn" ${v.errors && v.errors.length > 0 ? 'disabled' : ''}>Conferma Bolla</button>
         </div>
@@ -431,6 +432,14 @@ const UploadWizard = {
   },
 
   cancel() {
+    if (this.rawId) {
+      App.api("/documenti/raw/" + this.rawId, { method: "DELETE" }).catch(() => {});
+    }
+    this.render(document.getElementById("app-content"));
+  },
+
+  deleteDoc() {
+    if (!confirm("Eliminare definitivamente questo documento?")) return;
     if (this.rawId) {
       App.api("/documenti/raw/" + this.rawId, { method: "DELETE" }).catch(() => {});
     }
