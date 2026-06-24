@@ -113,7 +113,8 @@ const UploadWizard = {
 
         if (data.stato === "needs_review" || data.stato === "ready_to_confirm") {
           this.ocrData = data.dati_estratti || {};
-          this.ocrRawText = data.ocr_raw_text || "";
+          this.ocrRawText = data.ocr_raw_text;
+          if (!this.ocrRawText) console.warn("ocr_raw_text is empty/null", data);
           this.validation = data.validation || {};
           this.duplicate = data.duplicate || { duplicate: false };
           this.warnings = (data.validation?.warnings || []).slice();

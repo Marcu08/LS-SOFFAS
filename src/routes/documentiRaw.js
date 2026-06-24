@@ -57,7 +57,12 @@ async function processOcrBackground({ id, pdfPath, userId }) {
 
     if (!ocrText) throw new Error("OCR non ha prodotto testo");
 
+    console.log(`[OCR] Text length: ${ocrText.length} chars`);
+    console.log(`[OCR] First 500 chars:`, ocrText.substring(0, 500));
+
     const parsed = ocrService.processText(ocrText);
+    console.log(`[OCR] parsed.ocr_raw_text length:`, (parsed.ocr_raw_text || "").length);
+
     const confidence = 90;
     const sanitized = SanitizationService.applicaAll(parsed);
     const validation = ValidationService.validate(sanitized, { confidence });
@@ -87,7 +92,7 @@ async function processOcrBackground({ id, pdfPath, userId }) {
       .eq("id", id);
 
     if (updateErr) throw new Error("DB update: " + updateErr.message);
-    console.log(`[OCR] Completed for ${id} -> ${nextState}`);
+    console.log(`[OCR] DB updated for ${id}: ocr_raw_text=${(sanitized.ocr_raw_text || "").length}chars, stato=${nextState}`);
   } catch (err) {
     console.error(`[OCR] Error for ${id}:`, err.message);
     try {
