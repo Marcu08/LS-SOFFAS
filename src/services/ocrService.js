@@ -118,8 +118,24 @@ class OcrService {
     }
 
     if (data.colli === null || data.colli === undefined) {
-      const unitMatch = text.match(/(?:Units?|uns)\s*[:]?\s*(\d+)/i) || text.match(/(\d+)\s*uns/i);
+      const unitMatch = text.match(/(?:UNITS|Units?|uns)\s*[:.]?\s*(\d+)/i) || text.match(/(\d+)\s*(?:units?|uns)/i);
       if (unitMatch) data.colli = parseInt(unitMatch[1], 10);
+    }
+
+    if (data.colli === null || data.colli === undefined) {
+      const lines = text.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (/UNITS|units?|uns/i.test(lines[i])) {
+          for (let j = Math.max(0, i - 1); j <= Math.min(lines.length - 1, i + 2); j++) {
+            const nums = [...lines[j].matchAll(/\b(\d+)\b/g)].filter(m => m[1] !== "0" && m[1] !== "1");
+            if (nums.length > 0) {
+              data.colli = parseInt(nums[0][1], 10);
+              break;
+            }
+          }
+          break;
+        }
+      }
     }
 
     if ((data.colli === null || data.colli === undefined) && data.dettaglio && data.dettaglio.length > 0) {
