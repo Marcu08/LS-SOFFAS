@@ -113,7 +113,7 @@ const UploadWizard = {
 
       const result = await Tesseract.recognize(blob, "ita", {
         workerPath: "/lib/worker.min.js",
-        langPath: "https://cdn.jsdelivr.net/gh/tesseract-ocr/tessdata@main/",
+        langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/ita@1.0.0/4.0.0/",
         logger: (m) => {
           const status = document.getElementById("ocr-status");
           const bar = document.getElementById("ocr-progress-bar");
