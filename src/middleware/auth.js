@@ -1,4 +1,6 @@
-﻿const MIDDLEWARE_AUTH = (req, res, next) => {
+﻿const ALLOWED_EMAIL = "marcuccifrancesco0@gmail.com";
+
+const MIDDLEWARE_AUTH = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Token mancante" });
@@ -10,6 +12,9 @@
     .then(({ data, error }) => {
       if (error || !data.user) {
         return res.status(401).json({ error: "Token non valido" });
+      }
+      if (data.user.email?.toLowerCase() !== ALLOWED_EMAIL) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
       }
       req.user = data.user;
       next();
