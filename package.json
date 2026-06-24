@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "gestionale-ls-soffass",
   "version": "1.0.0",
   "description": "Logistic Solution WMS - Gestione bolle e giacenze Soffass",
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "@tesseract.js-data/ita": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "exceljs": "^4.4.0",
