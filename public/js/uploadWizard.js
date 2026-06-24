@@ -2,6 +2,7 @@ const UploadWizard = {
   step: 0,
   rawId: null,
   ocrData: null,
+  ocrRawText: null,
   validation: null,
   duplicate: null,
   warnings: [],
@@ -11,6 +12,7 @@ const UploadWizard = {
     this.step = 0;
     this.rawId = null;
     this.ocrData = null;
+    this.ocrRawText = null;
     this.validation = null;
     this.duplicate = null;
     this.warnings = [];
@@ -111,6 +113,7 @@ const UploadWizard = {
 
         if (data.stato === "needs_review" || data.stato === "ready_to_confirm") {
           this.ocrData = data.dati_estratti || {};
+          this.ocrRawText = data.ocr_raw_text || "";
           this.validation = data.validation || {};
           this.duplicate = data.duplicate || { duplicate: false };
           this.warnings = (data.validation?.warnings || []).slice();
@@ -255,14 +258,23 @@ const UploadWizard = {
           </div>
         </form>
         <div class="btn-group" style="justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-outline" onclick="UploadWizard.toggleRawText()">📄 OCR Grezzo</button>
           <button class="btn btn-outline" onclick="UploadWizard.cancel()">Annulla</button>
           <button class="btn btn-primary" id="pw-confirm-btn" ${v.errors && v.errors.length > 0 ? 'disabled' : ''}>Conferma Bolla</button>
+        </div>
+        <div id="pw-raw-text" style="display:none;margin-top:12px;">
+          <pre style="font-size:11px;max-height:300px;overflow:auto;background:var(--gray-100);padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-word;">${this.ocrRawText || "N/A"}</pre>
         </div>
       </div>
     `;
 
     this.renderDettaglio((data.dettaglio || []));
     this.attachPreview();
+  },
+
+  toggleRawText() {
+    const el = document.getElementById("pw-raw-text");
+    if (el) el.style.display = el.style.display === "none" ? "block" : "none";
   },
 
   attachPreview() {
