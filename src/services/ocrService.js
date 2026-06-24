@@ -40,8 +40,9 @@ class OcrService {
     data.numero_packing_list = m(/PACKING\s*LIST\s*No\.?\s*(\d+)/i);
     data.numero_documento = m(/NUMERO\s+(\d{6,15})/i);
 
+    const bollaMatch = m(/NUMERO\s*BOLLA\s*(\d{6,15})/i);
     const refCliente = m(/\b(\d{10})\b.*Riferimento\s*Cliente/i) || m(/Riferimento\s*Cliente[^0-9]*(\d{6,15})/i);
-    data.numero_bolla = refCliente || data.numero_documento || data.numero_packing_list || m(/\b(\d{10})\b/);
+    data.numero_bolla = bollaMatch || refCliente || data.numero_documento || data.numero_packing_list || m(/\b(\d{10})\b/);
 
     if (data.numero_ordine && !data.picking) data.picking = data.numero_ordine;
 
@@ -61,7 +62,7 @@ class OcrService {
       data.destinatario = destMatch[1].replace(/\s+\d+\s*$/, "").replace(/\s*SECONDO.*$/, "").trim();
     }
 
-    const artLine = text.match(/([A-Z0-9]{8,16})\s+(\d{6,8})\s+(.{5,}?)\s+KG\s+([\d.,]+)/i);
+    const artLine = text.match(/([A-Z0-9]{8,24})\s+(\d{6,8})\s+(.{5,}?)\s+KG\s+([\d.,]+)/i);
     if (artLine) {
       data.codice_articolo = artLine[1].trim();
       data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();
@@ -104,6 +105,15 @@ class OcrService {
     if (!data.colli) {
       const cMatch = text.match(/Totale\s+(\d+)\s+(\d+)\s+([\d.,]+)/i);
       if (cMatch) data.colli = parseInt(cMatch[2], 10);
+    }
+
+    if (!data.colli) {
+      const unitMatch = text.match(/Units?\s*(\d+)/i);
+      if (unitMatch) data.colli = parseInt(unitMatch[1], 10);
+    }
+
+    if (!data.colli && data.dettaglio && data.dettaglio.length > 0) {
+      data.colli = data.dettaglio.length;
     }
 
     const grMatch = text.match(/GRAMMATURA\s*(\d+[.,]\d+)\s*g/i);
@@ -167,6 +177,10 @@ class OcrService {
   }
 
   classifyDocument(text) {
+    if (/DATA\s*USCITA\s*MERCI/i.test(text)) {
+      return { tipo: "USCITA", motivazione: "DATA USCITA MERCI presente" };
+    }
+
     const destinatarioMatch = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,500}?(?:logistic\s*solution|soffass\s*c\/o\s*logistic\s*solution)/i);
     const luogoSpedizioneMatch = text.match(/LUOGO\s*SPEDIZIONE[\s\S]{0,500}?(?:logistic\s*solution|soffass\s*c\/o\s*logistic\s*solution)/i);
 

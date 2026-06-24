@@ -172,74 +172,74 @@ const UploadWizard = {
         <form id="preview-form">
           <div class="form-row">
             <div class="form-group">
-              <label>Tipo *</label>
+              <label for="pw-tipo">Tipo *</label>
               <select id="pw-tipo" class="${!data.tipo ? 'field-missing' : ''}">
                 <option value="ENTRATA">ENTRATA (merce in arrivo)</option>
                 <option value="USCITA">USCITA (merce in partenza)</option>
               </select>
             </div>
             <div class="form-group">
-              <label>Numero Bolla *</label>
+              <label for="pw-numero_bolla">Numero Bolla *</label>
               <input type="text" id="pw-numero_bolla" value="${data.numero_bolla || ''}" class="${!data.numero_bolla ? 'field-missing' : ''}">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Data Documento *</label>
+              <label for="pw-data_documento">Data Documento *</label>
               <input type="date" id="pw-data_documento" value="${this.formatDateForInput(data.data_documento)}" class="${!data.data_documento ? 'field-missing' : ''}">
             </div>
             <div class="form-group">
-              <label>Data Carico</label>
+              <label for="pw-data_carico">Data Carico</label>
               <input type="date" id="pw-data_carico" value="${this.formatDateForInput(data.data_carico) || ''}">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Numero Documento</label>
+              <label for="pw-numero_documento">Numero Documento</label>
               <input type="text" id="pw-numero_documento" value="${data.numero_documento || ''}">
             </div>
             <div class="form-group">
-              <label>Numero Ordine / Picking</label>
+              <label for="pw-picking">Numero Ordine / Picking</label>
               <input type="text" id="pw-picking" value="${data.picking || data.numero_ordine || ''}">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Codice Articolo *</label>
+              <label for="pw-codice_articolo">Codice Articolo *</label>
               <input type="text" id="pw-codice_articolo" value="${data.codice_articolo || ''}" class="${!data.codice_articolo ? 'field-missing' : ''}">
             </div>
           </div>
           <div class="form-group">
-            <label>Descrizione Articolo *</label>
+            <label for="pw-descrizione_articolo">Descrizione Articolo *</label>
             <input type="text" id="pw-descrizione_articolo" value="${data.descrizione_articolo || ''}" class="${!data.descrizione_articolo ? 'field-missing' : ''}">
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Quantità (KG) *</label>
+              <label for="pw-quantita">Quantità (KG) *</label>
               <input type="number" id="pw-quantita" step="0.001" value="${data.quantita || ''}" class="${!data.quantita ? 'field-missing' : ''}">
             </div>
             <div class="form-group">
-              <label>Unità</label>
+              <label for="pw-um">Unità</label>
               <select id="pw-um"><option value="KG" ${data.um === 'KG' ? 'selected' : ''}>KG</option><option value="LT" ${data.um === 'LT' ? 'selected' : ''}>LT</option><option value="MT" ${data.um === 'MT' ? 'selected' : ''}>MT</option><option value="PZ" ${data.um === 'PZ' ? 'selected' : ''}>PZ</option></select>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Colli</label>
+              <label for="pw-colli">Colli</label>
               <input type="number" id="pw-colli" value="${data.colli || ''}">
             </div>
             <div class="form-group">
-              <label>Peso Totale</label>
+              <label for="pw-peso_totale">Peso Totale</label>
               <input type="number" id="pw-peso_totale" step="0.001" value="${data.peso_totale || ''}">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Pallet</label>
+              <label for="pw-pallet">Pallet</label>
               <input type="number" id="pw-pallet" value="${data.pallet || ''}">
             </div>
             <div class="form-group">
-              <label>Causale Trasporto</label>
+              <label for="pw-causale_trasporto">Causale Trasporto</label>
               <input type="text" id="pw-causale_trasporto" value="${data.causale_trasporto || ''}">
             </div>
           </div>
@@ -255,7 +255,7 @@ const UploadWizard = {
             <div id="pw-dettaglio-uscita-note" style="display:none;font-size:12px;color:var(--gray-500);padding:8px;background:var(--gray-100);border-radius:4px;">Lotto derivato dal codice articolo — dettaglio non richiesto per USCITA</div>
           </div>
           <div class="form-group">
-            <label>Note</label>
+            <label for="pw-note">Note</label>
             <textarea id="pw-note" rows="2">${data.note || ''}</textarea>
           </div>
         </form>
