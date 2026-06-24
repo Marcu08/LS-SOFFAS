@@ -136,7 +136,7 @@ class OcrService {
     if (/logistic\s*solution/i.test(m)) return { tipo: "USCITA", motivazione: "Mittente Logistic Solution" };
     return { tipo: null, motivazione: "Non determinabile" };
   }
-}
+
   processText(ocrRawText) {
     const parsed = this.parseDocument(ocrRawText);
     parsed.ocr_raw_text = ocrRawText;
