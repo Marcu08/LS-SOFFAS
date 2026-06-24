@@ -99,7 +99,7 @@ const UploadWizard = {
         <div class="loading-spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:4px;"></div>
         <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Riconoscimento testo in corso...</div>
         <div class="ocr-step" style="font-size:12px;color:var(--gray-500);line-height:1.8;">
-          <div id="ocr-status">Avvio Tesseract.js...</div>
+          <div id="ocr-status">Preparazione immagine...</div>
           <div id="ocr-progress" style="margin-top:8px;height:4px;background:var(--gray-200);border-radius:2px;overflow:hidden;">
             <div id="ocr-progress-bar" style="height:100%;width:0%;background:var(--primary);transition:width 0.3s;"></div>
           </div>
@@ -108,7 +108,10 @@ const UploadWizard = {
     `;
 
     try {
-      const result = await Tesseract.recognize(imageData, "ita", {
+      const response = await fetch(imageData);
+      const blob = await response.blob();
+
+      const result = await Tesseract.recognize(blob, "ita", {
         logger: (m) => {
           const status = document.getElementById("ocr-status");
           const bar = document.getElementById("ocr-progress-bar");
