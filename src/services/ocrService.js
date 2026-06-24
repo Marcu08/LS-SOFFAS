@@ -67,7 +67,8 @@ class OcrService {
       data.codice_articolo = (artLine[1] + (artLine[2] || "")).trim();
       data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();
       data.quantita = itParse(artLine[4]);
-      if (artLine[5]) data.colli = parseInt(artLine[5], 10);
+      const huVal = artLine[5] ? parseInt(artLine[5], 10) : 0;
+      if (huVal > 0) data.colli = huVal;
     }
 
     if (!data.codice_articolo) {
@@ -76,7 +77,8 @@ class OcrService {
         data.codice_articolo = (fb[1] + (fb[2] || "")).trim();
         data.descrizione_articolo = fb[3].trim();
         data.quantita = itParse(fb[4]);
-        if (fb[5]) data.colli = parseInt(fb[5], 10);
+        const huValFb = fb[5] ? parseInt(fb[5], 10) : 0;
+        if (huValFb > 0) data.colli = huValFb;
       }
     }
 
@@ -104,18 +106,22 @@ class OcrService {
       }
     }
 
-    if (!data.colli) {
+    if (data.colli === null || data.colli === undefined) {
       const cMatch = text.match(/Totale\s+(\d+)\s+(\d+)\s+([\d.,]+)/i);
       if (cMatch) data.colli = parseInt(cMatch[2], 10);
     }
 
-    if (!data.colli) {
+    if (data.colli === null || data.colli === undefined) {
       const unitMatch = text.match(/Units?\s*(\d+)/i);
       if (unitMatch) data.colli = parseInt(unitMatch[1], 10);
     }
 
-    if (!data.colli && data.dettaglio && data.dettaglio.length > 0) {
+    if ((data.colli === null || data.colli === undefined) && data.dettaglio && data.dettaglio.length > 0) {
       data.colli = data.dettaglio.length;
+    }
+
+    if (data.colli === null || data.colli === undefined) {
+      data.colli = 1;
     }
 
     const grMatch = text.match(/GRAMMATURA\s*(\d+[.,]\d+)\s*g/i);

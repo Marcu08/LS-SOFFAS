@@ -54,6 +54,7 @@ const UploadWizard = {
   async handleFile(file) {
     if (!file.name.endsWith(".pdf")) { App.toast("Solo file PDF supportati", "error"); return; }
     const prog = document.getElementById("wiz-progress");
+    if (!prog) return;
     prog.style.display = "block";
     prog.innerHTML = '<div style="text-align:center;padding:12px;"><div class="loading-spinner" style="margin:0 auto 8px;width:24px;height:24px;border-width:3px;"></div><span style="font-size:13px;color:var(--gray-500);">Caricamento PDF in corso...</span></div>';
 
@@ -67,7 +68,7 @@ const UploadWizard = {
       App.toast("PDF caricato, avvio OCR...", "info");
       await this.startProcessing();
     } catch (e) {
-      prog.innerHTML = '<p style="color:var(--danger);text-align:center;">Errore: ' + e.message + "</p>";
+      if (prog) prog.innerHTML = '<p style="color:var(--danger);text-align:center;">Errore: ' + e.message + "</p>";
     }
   },
 

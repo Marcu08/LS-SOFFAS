@@ -82,21 +82,21 @@ async function processOcrBackground({ id, pdfPath, userId }) {
     const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
     const nextAction = nextState === "needs_review" ? "review" : "confirm_ready";
 
-    await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
-    await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
-
     const { error: updateErr } = await supabaseAdmin
       .from("documenti_raw")
       .update({
         ocr_raw_text: sanitized.ocr_raw_text,
         ocr_confidence: confidence,
         dati_estratti: sanitized,
-        stato: nextState,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
 
     if (updateErr) throw new Error("DB update: " + updateErr.message);
+
+    await DocumentStateService.transition({ id, action: "complete", userId, meta: { confidence } });
+    await DocumentStateService.transition({ id, action: nextAction, userId, meta: { confidence, warnings } });
+
     console.log(`[OCR] DB updated for ${id}: ocr_raw_text=${(sanitized.ocr_raw_text || "").length}chars, stato=${nextState}`);
   } catch (err) {
     console.error(`[OCR] Error for ${id}:`, err.message);
