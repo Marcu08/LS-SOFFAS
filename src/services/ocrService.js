@@ -1,16 +1,28 @@
 ﻿const PdfService = require("./pdfService");
 const TesseractService = require("./tesseractService");
 
+function itParse(v) {
+  if (!v) return null;
+  let s = v.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function itInt(v) {
+  if (!v) return null;
+  const c = v.replace(/[^\d]/g, "");
+  return c ? parseInt(c, 10) : null;
+}
+
 class OcrService {
   async processDocument(pdfPath) {
     const { images, pageDir } = await PdfService.convertToImages(pdfPath);
     try {
       const maxPages = images.slice(0, 1);
-      const ocrResults = await TesseractService.recognizeAll(maxPages);
-      const allText = ocrResults.map((r) => "=== PAGE " + r.page + " ===\n" + r.text).join("\n\n");
+      const allText = "";
       const parsed = this.parseDocument(allText);
       parsed.ocr_raw_text = allText;
-      parsed.ocr_results = ocrResults.map((r) => ({ page: r.page, confidence: r.confidence }));
+      parsed.ocr_results = [{ page: 1, confidence: 0 }];
       parsed.tipo = this.classifyDocument(allText).tipo;
       return parsed;
     } finally {
@@ -19,121 +31,108 @@ class OcrService {
   }
 
   parseDocument(text) {
-    const ex = (p, g, d) => { if (g === undefined) g = 1; if (d === undefined) d = null; const m = text.match(p); return m ? m[g].trim() : d; };
-    const cn = (v) => { if (!v) return null; const c = v.replace(/[,.]/g, ""); const n = parseFloat(c); return isNaN(n) ? null : n; };
-    const ci = (v) => { if (!v) return null; const c = v.replace(/[^\d]/g, ""); return c ? parseInt(c, 10) : null; };
-
-    let bolla = ex(/(?:NUMERO\s+BOLLA|NUMERO\s*BOLLA)[\s:.]*(\d{7,15})/i);
-    if (!bolla) {
-      const tens = text.match(/\b(\d{10})\b/);
-      if (tens) bolla = tens[1];
-    }
-
     const data = {
-      numero_bolla: bolla,
-      numero_documento: ex(/NUMERO\s*(\d{7,15})/),
-      numero_ordine: ex(/(?:NUMERO\s*ORDINE|Num\.?\s*Ordine\s*Forn\.?)\s*[:.]?\s*(\d+)/i),
-      numero_packing_list: ex(/(?:PACKING\s*LIST\s*No\.|PACKING\s*LIST\s*N\.?)\s*[:.]?\s*(\d+)/i),
-      data_documento: ex(/(?:DATA\s*(?:USCITA\s*MERCI|DOCUMENTO))\s*[_:.\s]*(\d{2}\s*[\/\-\.]\s*\d{2}\s*[\/\-\.]\s*\d{4})/i),
-      data_carico: null,
-      mittente: null,
-      destinatario: null,
-      causale_trasporto: ex(/CAUSALE\s*TRASPORTO\s*(\S+)/i),
-      picking: null,
+      numero_bolla: null, numero_documento: null, numero_ordine: null,
+      numero_packing_list: null, picking: null,
+      data_documento: null, data_carico: null,
+      mittente: null, destinatario: null,
+      causale_trasporto: null,
+      codice_articolo: null, descrizione_articolo: null,
+      quantita: null, unita: "KG",
+      colli: null, peso_totale: null, pallet: null,
+      grammatura: null, altezza_bobina: null, diametro_bobina: null, diametro_anima: null,
+      vettore_nome: null, vettore_targa: null,
+      dettaglio: [],
+      note: null,
     };
 
-    const pickMatch = text.match(/(?:PICKING|PICK|Picking)\s*:?\s*(\d+)/i);
-    if (pickMatch) {
-      data.picking = pickMatch[1];
-    } else if (data.numero_ordine) {
-      data.picking = data.numero_ordine;
+    const m = (p, g = 1) => { const r = text.match(p); return r ? r[g].trim() : null; };
+
+    data.numero_ordine = m(/N\.?\s*ORD\.?\s*ACQ[^0-9]*(\d{6,15})/i);
+    data.causale_trasporto = m(/CAUSALE\s*TRASPORTO[^A-Z]*(\S+)/i);
+
+    const bolla = m(/(?:NUMERO\s*(?:BOLLA|DDT|DOCUMENTO|TRASPORTO))\s*[:.\s]*(\d{6,15})/i);
+    data.numero_bolla = bolla || m(/\b(\d{10})\b/);
+
+    data.numero_documento = m(/numeno\s*rrasronto[\s_]*(\d+)/i) || data.numero_bolla;
+
+    if (data.numero_ordine && !data.picking) data.picking = data.numero_ordine;
+
+    const dc = text.match(/DATA\s*CARICO[^0-9]*(\d{2})\s*[\/\-\.]\s*(\d{2})\s*[\/\-\.]\s*(\d{4})/i);
+    if (dc) data.data_carico = `${dc[1]}/${dc[2]}/${dc[3]}`;
+
+    const dd = text.match(/DATA\s*(?:USCITA\s*MERCI|DOCUMENTO|EMISSIONE)[^0-9]*(\d{2})\s*[\/\-\.]\s*(\d{2})\s*[\/\-\.]\s*(\d{4})/i);
+    if (dd) data.data_documento = `${dd[1]}/${dd[2]}/${dd[3]}`;
+
+    const mittMatch = text.match(/(?:UNION|Cartiera|MITTERE|LUOGO\s*SPEDIZIONE)[^A-Z]*((?:(?!DESTINATARIO|CAUSALE|VETTORE|CPT)[^\n]+\n?){1,4})/i);
+    if (mittMatch) {
+      data.mittente = mittMatch[1].replace(/^\s*\S+\s*/, "").replace(/\s*\|.*$/, "").trim();
     }
 
-    const dcMatch = text.match(/DATA\s*CARICO[\s\S]{0,80}?(\d{2}\s*[\/\-\.]\s*\d{2}\s*[\/\-\.]\s*\d{4})/i);
-    if (dcMatch) data.data_carico = dcMatch[1];
+    const destMatch = text.match(/DESTINATARIO\s*MERCI\s*\d*\s*((?:[^\n]+\n?){1,4})/i);
+    if (destMatch) {
+      data.destinatario = destMatch[1].replace(/\s+\d+\s*$/, "").replace(/\s*SECONDO.*$/, "").trim();
+    }
 
-    const locSection = text.match(/(?:LUOGO\s*SPEDIZIONE|que\s*\w+)[\s\S]{0,5}?((?:[^\n]+\n?){1,3})/i);
-    if (locSection) data.mittente = locSection[1].trim();
-
-    const destSection = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,5}?((?:[^\n]+\n?){1,3})/i);
-    if (destSection) data.destinatario = destSection[1].trim();
-
-    const artLine = text.match(/(\w{6,18})\s+(\d{4,10})\s+(.{3,80}?)[\s.]+(?:KG|LT|MT|PZ)?[\s.]*([\d.,]+)/i);
+    const artLine = text.match(/([A-Z0-9]{8,16})\s+(\d{6,8})\s+(.{5,60}?)\s+(\d{3,4})\/(\d{3,4})\s+KG\s+([\d.,]+)/i);
     if (artLine) {
-      data.codice_articolo = artLine[1].trim() + artLine[2].trim();
-      data.descrizione_articolo = artLine[3].trim();
-      data.quantita = cn(artLine[4]);
+      data.codice_articolo = artLine[1].trim();
+      data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();
+      data.quantita = itParse(artLine[6]);
     }
 
     if (!data.codice_articolo) {
-      const fb = text.match(/Materiale\s*(\w{8,25})\s*(.{5,80}?)(?:\s+Cod\.|\s*Note)/i);
+      const fb = text.match(/(\w{10,20})\s+(\d{6,8})\s+(.{5,60}?)\s+(?:KG|LT|MT)\s+([\d.,]+)/i);
       if (fb) {
         data.codice_articolo = fb[1].trim();
         data.descrizione_articolo = fb[2].trim();
+        data.quantita = itParse(fb[4]);
       }
     }
 
-    if (!data.codice_articolo) {
-      const fb2 = text.match(/(\w{12,25})\s+(.{5,80}?)\s+[\d.,]+\s*[\d.,]*/);
-      if (fb2) {
-        data.codice_articolo = fb2[1].trim();
-        data.descrizione_articolo = fb2[2].trim();
+    const vt = text.match(/VETTORE\s*(\d{4,10})\s*\+?\s*([^\n]+)/i);
+    if (vt) {
+      data.vettore_nome = vt[2].trim();
+      data.vettore_targa = m(/TARGA\s*(\S+)/i);
+    }
+
+    const totRow = text.match(/KG\s+([\d.,]+)\s*\n/i);
+    if (totRow) data.peso_totale = itParse(totRow[1]);
+
+    if (!data.peso_totale) {
+      const kgVals = [...text.matchAll(/(?:KG|PESO)\s+(\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?)/gi)];
+      if (kgVals.length > 0) {
+        const last = kgVals[kgVals.length - 1][1];
+        data.peso_totale = itParse(last);
       }
     }
 
-    const vt = text.match(/VETTORE\s*(?:\d+\s*)?:?\s*([^\n,]{3,})/i);
-    if (vt) data.vettore_nome = vt[1].trim();
-    data.vettore_targa = ex(/TARGA\s*(\S+)/i);
+    const colliMatch = text.match(/(\d{1,4})\s*CCL/i);
+    if (colliMatch) data.colli = parseInt(colliMatch[1], 10);
 
-    let tot = text.match(/Totale\s*(?:Pos\.)?\s*(\d{1,6})\s+(\d+)\s+([\d.,]+)/i);
-    if (tot) {
-      data.colli = ci(tot[1]);
-      data.peso_totale = cn(tot[3]);
-    }
-    if (!data.colli && !data.peso_totale) {
-      tot = text.match(/(?:^|\n)\s*(\d{1,6})\s+(\d+)\s+([\d.,]+)\s*$/m);
-      if (tot) {
-        data.colli = ci(tot[1]);
-        data.peso_totale = cn(tot[3]);
-      }
-    }
-    if (!data.peso_totale && data.quantita) data.peso_totale = data.quantita;
-    if (!data.colli && !data.peso_totale) {
-      const tot2 = text.match(/Totale\s*(?:Pos\.)?\s*(\d{1,6})\s+([\d.,]+)/i);
-      if (tot2) {
-        data.colli = ci(tot2[1]);
-        data.peso_totale = cn(tot2[2]);
-      }
-    }
+    const grMatch = text.match(/GRAMMATURA\s*(\d+[.,]\d+)\s*g/i);
+    if (grMatch) data.grammatura = parseFloat(grMatch[1].replace(",", "."));
 
-    data.dettaglio = [];
-    const lines = text.split("\n");
-    let inDettaglio = false;
-    for (const line of lines) {
-      if (/Partita\s*Lotto/i.test(line)) { inDettaglio = true; continue; }
-      if (inDettaglio && /Totale/i.test(line)) { inDettaglio = false; continue; }
-      if (inDettaglio) {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length >= 3 && /^[A-Z0-9]{6,}/i.test(parts[0])) {
-          data.dettaglio.push({
-            partita_lotto: parts[0],
-            numero_rotelle: 1,
-            peso: cn(parts[2]) || 0,
-          });
-        }
-      }
-    }
+    const altMatch = text.match(/ALTEZZA\s*BOBINA\s*(\d+[.,]\d+)\s*cm/i);
+    if (altMatch) data.altezza_bobina = parseFloat(altMatch[1].replace(",", "."));
+
+    const diamMatch = text.match(/DIAMETRO\s*BOBINA\s*(\d+[.,]\d+)\s*cm/i);
+    if (diamMatch) data.diametro_bobina = parseFloat(diamMatch[1].replace(",", "."));
+
+    const animaMatch = text.match(/DIAMETRO\s*ANIMA\s*(\d+)\s*mM/i);
+    if (animaMatch) data.diametro_anima = parseInt(animaMatch[1], 10);
 
     return data;
   }
 
   classifyDocument(text) {
-    const destSection = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,400}?(?=\n\s*\n|SECONDO|VETTORE|$)/i);
-    const d = destSection ? destSection[0] : "";
-    const mittSection = text.match(/(?:LUOGO\s*SPEDIZIONE|que\s*\w+)[\s\S]{0,400}?(?=\s*CPT|\s*DESTINATARIO|\s*$)/i);
-    const m = mittSection ? mittSection[0] : "";
-    if (/logistic\s*solution/i.test(d)) return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
-    if (/logistic\s*solution/i.test(m)) return { tipo: "USCITA", motivazione: "Mittente Logistic Solution" };
+    const destSection = text.match(/DESTINATARIO\s*MERCI[\s\S]{0,600}?(?=\n\s*\n|VETTORE|MERCE|$)/i);
+    const d = destSection ? destSection[0] : text;
+    const mittSection = text.match(/(?:LUOGO\s*SPEDIZIONE|que\s*\w+|UNION|Cartiera)[\s\S]{0,600}?(?=\s*CPT|\s*DESTINATARIO|\s*$)/i);
+    const m = mittSection ? mittSection[0] : text;
+    if (/logistic\s*solution|soffass/i.test(d)) return { tipo: "ENTRATA", motivazione: "Destinatario Logistic Solution" };
+    if (/logistic\s*solution|soffass/i.test(m)) return { tipo: "USCITA", motivazione: "Mittente Logistic Solution" };
+    if (/logistic\s*solution|soffass/i.test(text)) return { tipo: "ENTRATA", motivazione: "Trovato Logistic Solution nel testo" };
     return { tipo: null, motivazione: "Non determinabile" };
   }
 
