@@ -44,38 +44,14 @@ router.post("/upload", auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post("/raw/:id/process", auth, async (req, res) => {
+async function processOcrBackground({ id, pdfPath, userId }) {
   try {
-    const { id } = req.params;
-
-    await DocumentStateService.transition({ id, action: "process", userId: req.user?.id });
-
-    const { data: raw } = await supabaseAdmin
-      .from("documenti_raw")
-      .select("pdf_path")
-      .eq("id", id)
-      .single();
-
-    if (!raw) return res.status(404).json({ error: "Documento non trovato" });
-
-    let ocrRaw, sanitized, validation, duplicateCheck;
-
-    try {
-      ocrRaw = await ocrService.processDocument(raw.pdf_path);
-    } catch (ocrErr) {
-      await DocumentStateService.transition({
-        id, action: "fail", userId: req.user?.id, meta: { error: ocrErr.message },
-      });
-      return res.status(422).json({ error: "OCR fallito", message: ocrErr.message });
-    }
+    const ocrRaw = await ocrService.processDocument(pdfPath);
 
     const confidence = ocrRaw.ocr_results?.[0]?.confidence || 0;
-
-    sanitized = SanitizationService.applicaAll(ocrRaw);
-
-    validation = ValidationService.validate(sanitized, { confidence });
-
-    duplicateCheck = await DuplicateService.check(sanitized);
+    const sanitized = SanitizationService.applicaAll(ocrRaw);
+    const validation = ValidationService.validate(sanitized, { confidence });
+    const duplicateCheck = await DuplicateService.check(sanitized);
 
     const warnings = [];
     if (validation.warnings) warnings.push(...validation.warnings);
@@ -84,11 +60,8 @@ router.post("/raw/:id/process", auth, async (req, res) => {
     }
 
     const nextState = validation.needsReview || duplicateCheck.duplicate ? "needs_review" : "ready_to_confirm";
-    if (validation.needsReview || duplicateCheck.duplicate) {
-      await DocumentStateService.transition({ id, action: "review", userId: req.user?.id, meta: { warnings, confidence } });
-    } else {
-      await DocumentStateService.transition({ id, action: "confirm_ready", userId: req.user?.id, meta: { confidence } });
-    }
+
+    await DocumentStateService.transition({ id, action: "confirm_ready", userId, meta: { confidence, warnings } });
 
     const { error: updateErr } = await supabaseAdmin
       .from("documenti_raw")
@@ -102,19 +75,41 @@ router.post("/raw/:id/process", auth, async (req, res) => {
       .eq("id", id);
 
     if (updateErr) {
-      await DocumentStateService.transition({ id, action: "fail", userId: req.user?.id, meta: { error: updateErr.message } });
-      return res.status(500).json({ error: "Errore salvataggio OCR: " + updateErr.message });
+      await DocumentStateService.transition({ id, action: "fail", userId, meta: { error: updateErr.message } });
     }
+  } catch (err) {
+    console.error("Async OCR error:", err);
+    try {
+      await DocumentStateService.transition({ id, action: "fail", userId, meta: { error: err.message } });
+      await supabaseAdmin.from("documenti_raw").update({
+        stato: "error", error_message: err.message, updated_at: new Date().toISOString(),
+      }).eq("id", id);
+    } catch (e) { console.error("Failed to update error state:", e); }
+  }
+}
 
-    res.json({
-      message: "OCR completato",
-      raw_id: id,
-      stato: nextState,
-      data: sanitized,
-      validation,
-      duplicate: duplicateCheck,
-      warnings,
-    });
+router.post("/raw/:id/process", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: raw } = await supabaseAdmin
+      .from("documenti_raw")
+      .select("stato, pdf_path")
+      .eq("id", id)
+      .single();
+
+    if (!raw) return res.status(404).json({ error: "Documento non trovato" });
+    if (raw.stato !== "uploaded") return res.status(400).json({ error: "Documento già elaborato o in elaborazione" });
+
+    await DocumentStateService.transition({ id, action: "process", userId: req.user?.id });
+
+    await supabaseAdmin.from("documenti_raw").update({
+      stato: "processing", updated_at: new Date().toISOString(),
+    }).eq("id", id);
+
+    processOcrBackground({ id, pdfPath: raw.pdf_path, userId: req.user?.id });
+
+    res.json({ message: "Elaborazione avviata", raw_id: id, stato: "processing" });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

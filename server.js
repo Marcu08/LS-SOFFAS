@@ -6,6 +6,13 @@ const fs = require("fs");
 const multer = require("multer");
 const { supabase, supabaseAdmin } = require("./src/db/supabase");
 
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 

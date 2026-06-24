@@ -71,6 +71,7 @@ const UploadWizard = {
 
   async startProcessing() {
     const prog = document.getElementById("wiz-progress");
+    let dots = 0;
     prog.innerHTML = `
       <div style="text-align:center;padding:16px;">
         <div class="loading-spinner" style="margin:0 auto 12px;width:32px;height:32px;border-width:4px;"></div>
@@ -81,30 +82,61 @@ const UploadWizard = {
           <div>⏳ Estrazione dati...</div>
           <div>⏳ Validazione...</div>
         </div>
+        <div class="status-text" style="font-size:12px;color:var(--gray-400);margin-top:8px;">Elaborazione in corso...</div>
       </div>
     `;
 
     try {
       const res = await App.api("/documenti/raw/" + this.rawId + "/process", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error);
+      if (!res.ok) throw new Error(data.error || data.message);
 
-      this.ocrData = data.data;
-      this.validation = data.validation;
-      this.duplicate = data.duplicate;
-      this.warnings = data.warnings || [];
-
-      if (data.stato === "error") {
-        this.renderError("OCR fallito", data.message, () => this.startProcessing());
-        return;
-      }
-
-      this.renderPreview();
+      await this.pollForResult();
     } catch (e) {
-      if (e.message && e.message.includes("OCR fallito")) {
-        this.renderError("OCR fallito", e.message, () => this.startProcessing());
-      } else {
-        this.renderError("Elaborazione fallita", e.message);
+      this.renderError("Elaborazione fallita", e.message);
+    }
+  },
+
+  async pollForResult() {
+    const prog = document.getElementById("wiz-progress");
+    let dots = 0;
+
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+
+      try {
+        const res = await App.api("/documenti/raw/" + this.rawId);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        if (data.stato === "needs_review" || data.stato === "ready_to_confirm") {
+          this.ocrData = data.dati_estratti || {};
+          this.validation = data.validation || {};
+          this.duplicate = data.duplicate || { duplicate: false };
+          this.warnings = (data.validation?.warnings || []).slice();
+          if (data.duplicate?.duplicate) {
+            this.warnings.push("Duplicato: bolla #" + (data.dati_estratti?.numero_bolla || "") + " già presente");
+          }
+          this.renderPreview();
+          return;
+        }
+
+        if (data.stato === "error") {
+          this.renderError("OCR fallito", data.error_message || "Errore sconosciuto");
+          return;
+        }
+
+        if (data.stato !== "processing" && data.stato !== "uploaded") {
+          this.renderError("Stato inaspettato: " + data.stato);
+          return;
+        }
+
+        dots = (dots + 1) % 4;
+        const st = prog.querySelector(".status-text");
+        if (st) st.textContent = "Elaborazione in corso" + ".".repeat(dots);
+      } catch (e) {
+        if (e.message?.includes("Stato inaspettato")) throw e;
+        console.error("Poll error:", e);
       }
     }
   },
