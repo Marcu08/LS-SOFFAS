@@ -174,8 +174,8 @@ const UploadWizard = {
             <div class="form-group">
               <label for="pw-tipo">Tipo *</label>
               <select id="pw-tipo" class="${!data.tipo ? 'field-missing' : ''}">
-                <option value="ENTRATA">ENTRATA (merce in arrivo)</option>
-                <option value="USCITA">USCITA (merce in partenza)</option>
+                <option value="ENTRATA" ${data.tipo === 'ENTRATA' ? 'selected' : ''}>ENTRATA (merce in arrivo)</option>
+                <option value="USCITA" ${data.tipo === 'USCITA' ? 'selected' : ''}>USCITA (merce in partenza)</option>
               </select>
             </div>
             <div class="form-group">

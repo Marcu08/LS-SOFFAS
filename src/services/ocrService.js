@@ -62,19 +62,21 @@ class OcrService {
       data.destinatario = destMatch[1].replace(/\s+\d+\s*$/, "").replace(/\s*SECONDO.*$/, "").trim();
     }
 
-    const artLine = text.match(/([A-Z0-9]{8,24})\s+(\d{6,8})\s+(.{5,}?)\s+KG\s+([\d.,]+)/i);
+    const artLine = text.match(/([A-Z0-9]{8,24})(?:\s+(\d{6,8}))?\s+(.{5,}?)\s+KG\s+([\d.,]+)(?:\s+(\d+))?/i);
     if (artLine) {
-      data.codice_articolo = artLine[1].trim();
+      data.codice_articolo = (artLine[1] + (artLine[2] || "")).trim();
       data.descrizione_articolo = artLine[3].trim().replace(/[®™]/g, "").trim();
       data.quantita = itParse(artLine[4]);
+      if (artLine[5]) data.colli = parseInt(artLine[5], 10);
     }
 
     if (!data.codice_articolo) {
-      const fb = text.match(/(\w{10,20})\s+(\d{6,8})\s+(.{5,}?)\s+(?:KG|LT|MT)\s+([\d.,]+)/i);
+      const fb = text.match(/(\w{10,20})(?:\s+(\d{6,8}))?\s+(.{5,}?)\s+(?:KG|LT|MT)\s+([\d.,]+)(?:\s+(\d+))?/i);
       if (fb) {
-        data.codice_articolo = fb[1].trim();
+        data.codice_articolo = (fb[1] + (fb[2] || "")).trim();
         data.descrizione_articolo = fb[3].trim();
         data.quantita = itParse(fb[4]);
+        if (fb[5]) data.colli = parseInt(fb[5], 10);
       }
     }
 
