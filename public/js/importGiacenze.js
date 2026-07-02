@@ -97,7 +97,7 @@ const ImportGiacenze = {
               <p style="font-size:12px;color:var(--danger);">${det.errori.length} errori</p>
             </div>` : ""}
           <div class="btn-group" style="margin-top:12px;">
-            <button class="btn btn-primary" onclick="App.navigate('movimenti')">Vedi Movimenti</button>
+            <button class="btn btn-primary" onclick="App.navigate('dashboard')">Vedi in Dashboard</button>
             <button class="btn btn-outline" onclick="ImportGiacenze.render(document.getElementById('app-content'))">Nuovo Import</button>
           </div>
         </div>
