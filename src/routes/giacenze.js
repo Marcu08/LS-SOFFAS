@@ -46,6 +46,7 @@ router.get("/riepilogo", auth, async (req, res) => {
 
     const totColli = giacenze ? giacenze.reduce((s, g) => s + (g.colli_totali || 0), 0) : 0;
     const totPeso = giacenze ? giacenze.reduce((s, g) => s + parseFloat(g.peso_totale || 0), 0) : 0;
+    const totPallet = giacenze ? giacenze.reduce((s, g) => s + (g.pallet_totali || 0), 0) : 0;
 
     const gruppiPicking = {};
     if (giacenze) {
@@ -67,6 +68,7 @@ router.get("/riepilogo", auth, async (req, res) => {
       totale_articoli: giacenze ? giacenze.length : 0,
       totale_colli: totColli,
       totale_peso_kg: Math.round(totPeso * 100) / 100,
+      totale_pallet: totPallet,
       totale_documenti: totaleDoc || 0,
       ultimi_movimenti: ultimiMov || [],
         raggruppamento_picking: Object.values(gruppiPicking),
@@ -168,6 +170,30 @@ async function importaSoffass(supabase, ws, req, res) {
   const prezzoMQ = parseFloat(cellF3) || 0;
   const cellG3 = ws.getCell("G3").value;
   const depositoMQ = parseFloat(cellG3) || 0;
+
+  if (palletInDeposito > 0) {
+    const { data: existing } = await supabase
+      .from("giacenze")
+      .select("*")
+      .eq("codice_articolo", "PALLET")
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from("giacenze").update({
+        pallet_totali: palletInDeposito,
+        descrizione_articolo: "Pallet in deposito",
+        ultimo_aggiornamento: new Date().toISOString(),
+      }).eq("id", existing.id);
+    } else {
+      await supabase.from("giacenze").insert([{
+        codice_articolo: "PALLET",
+        descrizione_articolo: "Pallet in deposito",
+        colli_totali: 0,
+        peso_totale: 0,
+        pallet_totali: palletInDeposito,
+      }]);
+    }
+  }
 
   for (let i = 19; i <= ws.rowCount; i++) {
     const row = ws.getRow(i);

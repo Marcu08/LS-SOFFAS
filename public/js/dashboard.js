@@ -83,6 +83,10 @@
           <div class="stat-value">${App.formatNumber(riepilogo.totale_peso_kg)}</div>
           <div class="stat-label">Peso Totale (KG)</div>
         </div>
+        <div class="stat-card info">
+          <div class="stat-value">${riepilogo.totale_pallet || 0}</div>
+          <div class="stat-label">Pallet Totali</div>
+        </div>
         <div class="stat-card">
           <div class="stat-value">${riepilogo.totale_documenti || 0}</div>
           <div class="stat-label">Documenti Processati</div>
