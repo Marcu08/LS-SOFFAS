@@ -2,9 +2,10 @@ const ImportGiacenze = {
   render(el) {
     el.innerHTML = `
       <div class="card">
-        <div class="card-title">Import Excel — Pareggio Giacenze</div>
+        <div class="card-title">Import Excel</div>
         <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">
-          Carica un file Excel con le giacenze da allineare. Colonne: <strong>Codice Articolo</strong> | <strong>Descrizione</strong> | <strong>Kg</strong> | <strong>Colli</strong> | <strong>Pallet</strong>
+          <strong>Formato Giacenze:</strong> Codice Articolo | Descrizione | Kg | Colli | Pallet<br>
+          <strong>Formato SOFFASS:</strong> File con movimentazione pallet (rilevato automaticamente)
         </p>
         <div class="dropzone" id="import-dropzone">
           <div class="dropzone-icon">📊</div>
@@ -59,6 +60,51 @@ const ImportGiacenze = {
     const el = document.getElementById("import-risultati");
     el.style.display = "block";
     const det = data.dettaglio || {};
+
+    if (data.tipo === "soffass") {
+      const movimenti = det.movimenti || [];
+      const riepilogo = det.riepilogo || {};
+      el.innerHTML = `
+        <div class="card" style="border:2px solid var(--success);">
+          <div class="card-title" style="color:var(--success);">✅ Import SOFFASS Completato</div>
+          <p style="font-size:14px;margin-bottom:12px;">${data.message}</p>
+          ${riepilogo.pallet_in_deposito ? `
+            <div class="stats-grid" style="margin-bottom:12px;">
+              <div class="stat-card"><div class="stat-value">${riepilogo.pallet_in_deposito}</div><div class="stat-label">Pallet in Deposito</div></div>
+              ${riepilogo.prezzo_mq ? `<div class="stat-card"><div class="stat-value">${App.formatNumber(riepilogo.prezzo_mq)}</div><div class="stat-label">Prezzo MQ</div></div>` : ""}
+              ${riepilogo.deposito_mq ? `<div class="stat-card"><div class="stat-value">${riepilogo.deposito_mq}</div><div class="stat-label">Deposito MQ</div></div>` : ""}
+            </div>` : ""}
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Pallet USCITI</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${movimenti.length > 0 ? movimenti.map(m => `
+                  <tr>
+                    <td>${App.formatDate(m.data)}</td>
+                    <td><strong>${m.pallet}</strong></td>
+                  </tr>
+                `).join("") : '<tr><td colspan="2" style="text-align:center;color:var(--gray-400);">Nessun movimento importato</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          ${det.errori && det.errori.length > 0 ? `
+            <div style="margin-top:12px;padding:8px;background:var(--danger-bg);border-radius:6px;">
+              <p style="font-size:12px;color:var(--danger);">${det.errori.length} errori</p>
+            </div>` : ""}
+          <div class="btn-group" style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="App.navigate('movimenti')">Vedi Movimenti</button>
+            <button class="btn btn-outline" onclick="ImportGiacenze.render(document.getElementById('app-content'))">Nuovo Import</button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     const items = det.aggiornati || [];
     el.innerHTML = `
       <div class="card" style="border:2px solid var(--success);">

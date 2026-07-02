@@ -92,6 +92,17 @@ router.post("/import-excel", auth, async (req, res) => {
         const wb = new Excel.Workbook();
         await wb.xlsx.readFile(req.file.path);
         const ws = wb.worksheets[0];
+
+        const cellB1 = String(ws.getCell("B1").value || "").trim();
+        const cellB18 = String(ws.getCell("B18").value || "").trim();
+        const cellD18 = String(ws.getCell("D18").value || "").trim();
+
+        const isSoffass = cellB1 === "Pallet Entrati" || (cellB18 === "ENTRATI" && cellD18 === "USCITI");
+
+        if (isSoffass) {
+          return await importaSoffass(supabase, ws, req, res);
+        }
+
         const risultati = { processati: 0, errori: [], aggiornati: [] };
 
         for (let i = 2; i <= ws.rowCount; i++) {
@@ -145,5 +156,74 @@ router.post("/import-excel", auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+async function importaSoffass(supabase, ws, req, res) {
+  const movimenti = [];
+  const errori = [];
+  let righeValide = 0;
+
+  const cellD3 = ws.getCell("D3").value;
+  const palletInDeposito = parseInt(cellD3) || 0;
+  const cellF3 = ws.getCell("F3").value;
+  const prezzoMQ = parseFloat(cellF3) || 0;
+  const cellG3 = ws.getCell("G3").value;
+  const depositoMQ = parseFloat(cellG3) || 0;
+
+  for (let i = 19; i <= ws.rowCount; i++) {
+    const row = ws.getRow(i);
+    const dataVal = row.getCell(4).value;
+    const qtyVal = parseInt(row.getCell(5).value) || 0;
+
+    if (!dataVal || qtyVal <= 0) continue;
+
+    let dataMov;
+    if (typeof dataVal === "object" && dataVal instanceof Date) {
+      dataMov = dataVal.toISOString().split("T")[0];
+    } else if (typeof dataVal === "number") {
+      const d = new Date((dataVal - 25569) * 86400 * 1000);
+      dataMov = d.toISOString().split("T")[0];
+    } else {
+      dataMov = String(dataVal);
+    }
+
+    const { error } = await supabase.from("movimenti").insert([{
+      tipo: "USCITA",
+      codice_articolo: "PALLET",
+      descrizione_articolo: "Uscita pallet da magazzino",
+      colli: 0,
+      peso: 0,
+      pallet: qtyVal,
+      data_movimento: dataMov,
+      numero_bolla: "SOFFASS-" + dataMov,
+    }]);
+
+    if (error) {
+      errori.push({ riga: i, errore: error.message });
+    } else {
+      righeValide++;
+      movimenti.push({ data: dataMov, pallet: qtyVal });
+    }
+  }
+
+  try { fs.unlinkSync(req.file.path); } catch (e) {}
+
+  let message = `Import SOFFASS completato: ${righeValide} movimenti USCITA importati`;
+  if (palletInDeposito > 0) message += ` | Pallet in deposito: ${palletInDeposito}`;
+  if (errori.length > 0) message += ` | Errori: ${errori.length}`;
+
+  res.json({
+    message,
+    tipo: "soffass",
+    dettaglio: {
+      movimenti,
+      errori,
+      riepilogo: {
+        pallet_in_deposito: palletInDeposito,
+        prezzo_mq: prezzoMQ,
+        deposito_mq: depositoMQ,
+      },
+    },
+  });
+}
 
 module.exports = router;
