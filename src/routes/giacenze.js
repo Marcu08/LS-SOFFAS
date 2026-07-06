@@ -124,9 +124,10 @@ router.post("/import-excel", auth, async (req, res) => {
         const cellD18 = String(ws.getCell("D18").value || "").trim();
 
         const isSoffass = cellB1 === "Pallet Entrati" || (cellB18 === "ENTRATI" && cellD18 === "USCITI");
+        const apply = req.query.apply === "true";
 
         if (isSoffass) {
-          return await importaSoffass(supabase, ws, req, res);
+          return await importaSoffass(supabase, ws, req, res, apply);
         }
 
         const risultati = { processati: 0, errori: [], aggiornati: [] };
@@ -143,43 +144,45 @@ router.post("/import-excel", auth, async (req, res) => {
 
           if (!codArt || qty <= 0) continue;
 
-          const { data: existing } = await supabase
-            .from("giacenze")
-            .select("*")
-            .eq("codice_articolo", codArt)
-            .maybeSingle();
+          if (apply) {
+            const { data: existing } = await supabase
+              .from("giacenze")
+              .select("*")
+              .eq("codice_articolo", codArt)
+              .maybeSingle();
 
-          if (existing) {
-            await supabase.from("giacenze").update({
-              peso_totale: qty,
-              colli_totali: colli || existing.colli_totali,
-              pallet_totali: pallet || existing.pallet_totali,
-              descrizione_articolo: descr || existing.descrizione_articolo,
-              ultimo_aggiornamento: new Date().toISOString(),
-            }).eq("id", existing.id);
-          } else {
-            await supabase.from("giacenze").insert({
+            if (existing) {
+              await supabase.from("giacenze").update({
+                peso_totale: qty,
+                colli_totali: colli || existing.colli_totali,
+                pallet_totali: pallet || existing.pallet_totali,
+                descrizione_articolo: descr || existing.descrizione_articolo,
+                ultimo_aggiornamento: new Date().toISOString(),
+              }).eq("id", existing.id);
+            } else {
+              await supabase.from("giacenze").insert({
+                codice_articolo: codArt,
+                descrizione_articolo: descr || "N/A",
+                peso_totale: qty,
+                colli_totali: colli,
+                pallet_totali: pallet,
+              });
+            }
+
+            await supabase.from("movimenti").insert([{
+              tipo: "ENTRATA",
               codice_articolo: codArt,
               descrizione_articolo: descr || "N/A",
-              peso_totale: qty,
-              colli_totali: colli,
-              pallet_totali: pallet,
-            });
+              colli, peso: qty, pallet,
+              data_movimento: dataImport,
+              numero_bolla: "PAREGGIO-" + dataImport + "-" + codArt,
+            }]);
+
+            await req.app.locals.supabaseAdmin.from("event_log").insert([{
+              evento: "stock_adjustment",
+              dettaglio: { codice_articolo: codArt, peso_kg: qty, colli, pallet, origine: "import_excel" },
+            }]);
           }
-
-          await supabase.from("movimenti").insert([{
-            tipo: "ENTRATA",
-            codice_articolo: codArt,
-            descrizione_articolo: descr || "N/A",
-            colli, peso: qty, pallet,
-            data_movimento: dataImport,
-            numero_bolla: "PAREGGIO-" + dataImport + "-" + codArt,
-          }]);
-
-          await req.app.locals.supabaseAdmin.from("event_log").insert([{
-            evento: "stock_adjustment",
-            dettaglio: { codice_articolo: codArt, peso_kg: qty, colli, pallet, origine: "import_excel" },
-          }]);
 
           risultati.processati++;
           risultati.aggiornati.push({ codice_articolo: codArt, kg: qty, colli });
@@ -188,7 +191,7 @@ router.post("/import-excel", auth, async (req, res) => {
         try { fs.unlinkSync(req.file.path); } catch (e) {}
 
         res.json({
-          message: `Import completato: ${risultati.processati} articoli elaborati`,
+          message: apply ? `Import completato: ${risultati.processati} articoli elaborati` : `Anteprima: ${risultati.processati} articoli rilevati (usa ?apply=true per confermare)`,
           dettaglio: risultati,
         });
       } catch (e) {
@@ -200,7 +203,7 @@ router.post("/import-excel", auth, async (req, res) => {
   }
 });
 
-async function importaSoffass(supabase, ws, req, res) {
+async function importaSoffass(supabase, ws, req, res, apply) {
   const movimenti = [];
   const errori = [];
   let righeValide = 0;
@@ -213,7 +216,7 @@ async function importaSoffass(supabase, ws, req, res) {
   const cellG3 = ws.getCell("G3").value;
   const depositoMQ = parseFloat(cellG3) || 0;
 
-  if (palletInDeposito > 0) {
+  if (apply && palletInDeposito > 0) {
     const { data: existing } = await supabase
       .from("giacenze")
       .select("*")
@@ -271,30 +274,36 @@ async function importaSoffass(supabase, ws, req, res) {
         righeSaltate++;
         continue;
       }
-      const { error } = await supabase.from("movimenti").insert([{
-        tipo: m.tipo,
-        codice_articolo: "PALLET",
-        descrizione_articolo: m.tipo === "ENTRATA" ? "Entrata pallet in magazzino" : "Uscita pallet da magazzino",
-        colli: 0,
-        peso: 0,
-        pallet: m.qty,
-        data_movimento: m.data,
-        numero_bolla: "SOFFASS-" + m.data,
-      }]);
-      if (error) {
-        errori.push({ riga: i, errore: error.message });
-      } else {
-        existingKeys.add(key);
-        righeValide++;
-        movimenti.push({ data: m.data, pallet: m.qty, tipo: m.tipo });
+      if (apply) {
+        const { error } = await supabase.from("movimenti").insert([{
+          tipo: m.tipo,
+          codice_articolo: "PALLET",
+          descrizione_articolo: m.tipo === "ENTRATA" ? "Entrata pallet in magazzino" : "Uscita pallet da magazzino",
+          colli: 0,
+          peso: 0,
+          pallet: m.qty,
+          data_movimento: m.data,
+          numero_bolla: "SOFFASS-" + m.data,
+        }]);
+        if (error) {
+          errori.push({ riga: i, errore: error.message });
+          continue;
+        }
       }
+      existingKeys.add(key);
+      righeValide++;
+      movimenti.push({ data: m.data, pallet: m.qty, tipo: m.tipo });
     }
   }
 
   try { fs.unlinkSync(req.file.path); } catch (e) {}
 
-  let message = `Import SOFFASS completato: ${righeValide} movimenti importati (${righeSaltate} duplicati saltati)`;
-  if (palletInDeposito > 0) message += ` | Pallet in deposito: ${palletInDeposito}`;
+  let message;
+  if (apply) {
+    message = `Import SOFFASS completato: ${righeValide} movimenti importati (${righeSaltate} duplicati saltati)`;
+  } else {
+    message = `Anteprima SOFFASS: ${righeValide} movimenti rilevati, ${palletInDeposito} pallet in deposito (usa ?apply=true per confermare)`;
+  }
   if (errori.length > 0) message += ` | Errori: ${errori.length}`;
 
   res.json({
