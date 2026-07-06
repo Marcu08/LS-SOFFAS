@@ -5,6 +5,16 @@ const Excel = require("exceljs");
 const path = require("path");
 const fs = require("fs");
 
+function normalizzaNumeroIt(v) {
+  if (!v) return null;
+  let s = String(v).trim();
+  if (/^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$/.test(s) || /^\d+[.,]\d+$/.test(s)) {
+    s = s.replace(/[.]/g, "").replace(",", ".");
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
 router.get("/", auth, async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
@@ -110,11 +120,12 @@ router.post("/import-excel", auth, async (req, res) => {
 
         for (let i = 2; i <= ws.rowCount; i++) {
           const row = ws.getRow(i);
-          const codArt = String(row.getCell(1).value || "").trim();
+          const codArtRaw = String(row.getCell(1).value || "").trim();
+          const codArt = normalizzaNumeroIt(codArtRaw) ? String(Math.round(normalizzaNumeroIt(codArtRaw))) : codArtRaw;
           const descr = String(row.getCell(2).value || "").trim();
-          const qty = parseFloat(row.getCell(3).value) || 0;
-          const colli = parseInt(row.getCell(4).value) || 0;
-          const pallet = parseInt(row.getCell(5).value) || 0;
+          const qty = normalizzaNumeroIt(row.getCell(3).value) || 0;
+          const colli = parseInt(normalizzaNumeroIt(row.getCell(4).value)) || 0;
+          const pallet = parseInt(normalizzaNumeroIt(row.getCell(5).value)) || 0;
 
           if (!codArt || qty <= 0) continue;
 
