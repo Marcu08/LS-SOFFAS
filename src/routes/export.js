@@ -4,10 +4,18 @@ const auth = require("../middleware/auth");
 const ExcelJS = require("exceljs");
 
 const MESI = ["GENNAIO","FEBBRAIO","MARZO","APRILE","MAGGIO","GIUGNO","LUGLIO","AGOSTO","SETTEMBRE","OTTOBRE","NOVEMBRE","DICEMBRE"];
-const HL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1a56db" } };
-const HF = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
 const NF = '#,##0';
 const BDR = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+
+const TC = {
+  pallet:    { h: "FF1a56db", l: "FFe8f0fe", a: "FFdbeafe", s: "FFbfdbfe", sa: "FF93c5fd", alt: "FFf0f4ff" },
+  giacenze:  { h: "FF059669", l: "FFecfdf5", a: "FFd1fae5", s: "FFa7f3d0", sa: "FF6ee7b7", alt: "FFf0fdf4" },
+  movimenti: { h: "FFd97706", l: "FFfffbeb", a: "FFfef3c7", s: "FFfde68a", sa: "FFfcd34d", alt: "FFfff7ed" },
+  documenti: { h: "FF0891b2", l: "FFecfeff", a: "FFcffafe", s: "FFa5f3fc", sa: "FF67e8f9", alt: "FFf0fdfa" },
+};
+
+function HC(argb) { return { type: "pattern", pattern: "solid", fgColor: { argb } }; }
+function HF(c, bold) { return { bold: bold ?? true, color: { argb: c ?? "FFFFFFFF" }, size: bold ? 11 : 10 }; }
 
 function sF(ws, addr, formula, result) {
   const cell = ws.getCell(addr);
@@ -38,7 +46,15 @@ const CFG = {
   },
 };
 
-async function buildMonthlySheet(wb, m, anno, cfg, mesiData) {
+function styleCell(cell, opts) {
+  if (opts.fill) cell.fill = HC(opts.fill);
+  if (opts.font) cell.font = opts.font;
+  if (opts.border) cell.border = opts.border;
+  if (opts.align) cell.alignment = opts.align;
+  if (opts.numFmt) cell.numFmt = opts.numFmt;
+}
+
+async function buildMonthlySheet(wb, m, anno, cfg, mesiData, colors) {
   const ws = wb.addWorksheet(MESI[m]);
   const md = mesiData[m];
   const entrate = md.entrate || {};
@@ -47,11 +63,18 @@ async function buildMonthlySheet(wb, m, anno, cfg, mesiData) {
   const nDataRows = Math.max(dataKeys.length, 1);
   const sumRow = nDataRows <= 14 ? 33 : 19 + nDataRows;
   const lastDataRow = sumRow - 1;
+  const fBold = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+  const fBoldDark = { bold: true, color: { argb: colors.h }, size: 10 };
 
-  for (const [c, v] of Object.entries(cfg.h1)) { const cell = ws.getCell(c + "1"); cell.value = v; cell.fill = HL; cell.font = HF; }
+  for (const [c, v] of Object.entries(cfg.h1)) { styleCell(ws.getCell(c + "1"), { fill: colors.h, font: fBold, border: BDR, align: { horizontal: "center", vertical: "middle", wrapText: true } }); }
   ws.getRow(1).height = 28;
-  ws.getCell("F2").value = cfg.h2;
 
+  styleCell(ws.getCell("F2"), { font: { italic: true, color: { argb: "FF6B7280" }, size: 10 } });
+
+  [3, 4].forEach(r => {
+    for (let c = 1; c <= 10; c++) styleCell(ws.getCell(r, c), { fill: colors.l, border: BDR });
+  });
+  styleCell(ws.getCell("J3"), { font: { bold: true, color: { argb: colors.h }, size: 10 }, align: { horizontal: "right" } });
   ws.getCell("D3").value = md.openingStock;
   ws.getCell("F3").value = cfg.colF;
   sF(ws, "G3", "F3*F4", cfg.colF);
@@ -67,6 +90,11 @@ async function buildMonthlySheet(wb, m, anno, cfg, mesiData) {
   ws.getCell("H4").value = cfg.tariffaIng;
   ws.getCell("I4").value = cfg.tariffaUs;
 
+  [5, 6].forEach(r => ws.getRow(r).height = 4);
+
+  [7, 8, 9].forEach(r => {
+    for (let c = 1; c <= 10; c++) styleCell(ws.getCell(r, c), { fill: colors.a, border: BDR, font: { size: 10 } });
+  });
   ws.getCell("B7").value = cfg.h7;
   sF(ws, "D7", `C${sumRow}`, md.totEntrata);
   sF(ws, "G7", `D7*I4`, md.totEntrata * cfg.tariffaUs);
@@ -79,39 +107,47 @@ async function buildMonthlySheet(wb, m, anno, cfg, mesiData) {
   sF(ws, "D9", `I${lastDataRow}`, cfg.tariffaUs);
   sF(ws, "G9", `D9*${cfg.extraVal}`, cfg.tariffaUs * cfg.extraVal);
 
+  for (let c = 1; c <= 10; c++) {
+    styleCell(ws.getCell(10, c), { fill: colors.s, border: BDR, font: { bold: true, size: 10 } });
+  }
   sF(ws, "G10", "G4+G7+G8+G9",
     (cfg.colF * cfg.tariffaIng) + (md.totEntrata * cfg.tariffaUs) + (md.totUscita * cfg.tariffaUs) + (cfg.tariffaUs * cfg.extraVal));
+  styleCell(ws.getCell("G10"), { fill: colors.sa, font: { bold: true, color: { argb: "FFFFFFFF" }, size: 11 } });
 
-  for (let r = 11; r <= 17; r++) ws.getRow(r).height = 18;
+  for (let r = 11; r <= 17; r++) ws.getRow(r).height = 4;
 
+  for (let c = 1; c <= 10; c++) styleCell(ws.getCell(18, c), { fill: colors.h, font: fBold, border: BDR });
   ws.getCell("B18").value = "ENTRATI";
-  ws.getCell("B18").font = { bold: true };
   ws.getCell("D18").value = "USCITI";
-  ws.getCell("D18").font = { bold: true };
 
   let dr = 19;
   for (const d of dataKeys) {
-    if (entrate[d]) { ws.getCell(`B${dr}`).value = d; ws.getCell(`C${dr}`).value = entrate[d]; ws.getCell(`C${dr}`).numFmt = NF; }
-    if (uscite[d]) { ws.getCell(`D${dr}`).value = d; ws.getCell(`E${dr}`).value = uscite[d]; ws.getCell(`E${dr}`).numFmt = NF; }
-    ws.getRow(dr).height = 18;
+    const isEven = (dr - 19) % 2 === 0;
+    const rowColor = isEven ? colors.l : colors.alt;
+    for (let c = 1; c <= 10; c++) styleCell(ws.getCell(dr, c), { fill: rowColor, border: BDR });
+    if (entrate[d]) { ws.getCell(`B${dr}`).value = d; ws.getCell(`C${dr}`).value = entrate[d]; ws.getCell(`C${dr}`).numFmt = NF; styleCell(ws.getCell(`C${dr}`), { fill: rowColor, border: BDR, font: { bold: true, size: 10 } }); }
+    if (uscite[d]) { ws.getCell(`D${dr}`).value = d; ws.getCell(`E${dr}`).value = uscite[d]; ws.getCell(`E${dr}`).numFmt = NF; styleCell(ws.getCell(`E${dr}`), { fill: rowColor, border: BDR, font: { bold: true, size: 10 } }); }
+    ws.getRow(dr).height = 16;
     dr++;
   }
-  while (dr <= lastDataRow) { ws.getRow(dr).height = 18; dr++; }
+  while (dr <= lastDataRow) { for (let c = 1; c <= 10; c++) styleCell(ws.getCell(dr, c), { fill: colors.alt, border: BDR }); ws.getRow(dr).height = 14; dr++; }
 
+  for (let c = 1; c <= 10; c++) {
+    styleCell(ws.getCell(sumRow, c), { fill: colors.sa, border: BDR, font: { bold: true, color: { argb: "FFFFFFFF" }, size: 11 } });
+  }
   sF(ws, `C${sumRow}`, `SUM(C19:C${lastDataRow})`, md.totEntrata);
   ws.getCell(`C${sumRow}`).numFmt = NF;
   sF(ws, `E${sumRow}`, `SUM(E19:E${lastDataRow})`, md.totUscita);
   ws.getCell(`E${sumRow}`).numFmt = NF;
 
-  for (let c = 1; c <= 10; c++) { ws.getColumn(c).width = [16, 20, 18, 16, 18, 10, 14, 16, 14, 24][c - 1]; }
+  for (let c = 1; c <= 10; c++) ws.getColumn(c).width = [16, 20, 18, 16, 18, 10, 14, 16, 14, 24][c - 1];
+  ws.getRow(3).height = 20;
+  ws.getRow(4).height = 20;
+  ws.pageSetup.orientation = "landscape";
+  ws.pageSetup.fitToPage = true;
 }
 
-const TIPI_CODICE = {
-  pallet: "PALLET",
-  giacenze: null,
-  movimenti: null,
-  documenti: null,
-};
+const TIPI_CODICE = { pallet: "PALLET", giacenze: null, movimenti: null, documenti: null };
 
 async function getTipoData(supabase, anno, tipo) {
   const filterCode = TIPI_CODICE[tipo];
@@ -132,41 +168,30 @@ async function getTipoData(supabase, anno, tipo) {
     let totEntrata = 0, totUscita = 0;
     for (const mm of filtered) {
       const val = tipo === "pallet" ? (mm.pallet || 0) : tipo === "documenti" ? 1 : (mm.colli || 0);
-      if (mm.tipo === "ENTRATA") {
-        entrate[mm.data_movimento] = (entrate[mm.data_movimento] || 0) + val;
-        totEntrata += val;
-      } else {
-        uscite[mm.data_movimento] = (uscite[mm.data_movimento] || 0) + val;
-        totUscita += val;
-      }
+      if (mm.tipo === "ENTRATA") { entrate[mm.data_movimento] = (entrate[mm.data_movimento] || 0) + val; totEntrata += val; }
+      else { uscite[mm.data_movimento] = (uscite[mm.data_movimento] || 0) + val; totUscita += val; }
     }
     byMonth[m] = { entrate, uscite, totEntrata, totUscita };
   }
 
   let cumulativeStock = 0;
-  for (let m = 0; m < 12; m++) {
-    byMonth[m].openingStock = cumulativeStock;
-    cumulativeStock += byMonth[m].totEntrata - byMonth[m].totUscita;
-  }
-
+  for (let m = 0; m < 12; m++) { byMonth[m].openingStock = cumulativeStock; cumulativeStock += byMonth[m].totEntrata - byMonth[m].totUscita; }
   return byMonth;
 }
 
 async function buildFoglio1(wb, supabase, tipo) {
   const cfg = CFG[tipo];
+  const colors = TC[tipo];
   const f1 = wb.addWorksheet("Foglio1");
   let headers, data;
+
   if (tipo === "pallet") {
     headers = ["", cfg.f1B, "NUMERO PACKING LIST", "PARTITA", "LOTTO", "DATA ENTRATA", "DATA USCITA"];
     const { data: dettagli } = await supabase.from("dettaglio_documenti").select("partita_lotto, numero_rotelle, peso, documento_id, posizione").order("posizione");
     const { data: documenti } = await supabase.from("documenti").select("id, codice_articolo, descrizione_articolo, numero_packing_list, data_documento, tipo");
     const docMap = {};
     if (documenti) documenti.forEach(d => docMap[d.id] = d);
-    data = (dettagli || []).map(dt => {
-      const doc = docMap[dt.documento_id];
-      if (!doc) return null;
-      return [doc.codice_articolo, doc.numero_packing_list, dt.partita_lotto, dt.numero_rotelle, doc.data_documento, doc.tipo === "USCITA" ? doc.data_documento : null];
-    }).filter(Boolean);
+    data = (dettagli || []).map(dt => { const doc = docMap[dt.documento_id]; if (!doc) return null; return [doc.codice_articolo, doc.numero_packing_list, dt.partita_lotto, dt.numero_rotelle, doc.data_documento, doc.tipo === "USCITA" ? doc.data_documento : null]; }).filter(Boolean);
   } else if (tipo === "giacenze") {
     headers = ["", cfg.f1B, "DESCRIZIONE", "COLLI TOTALI", "PESO TOTALE", "PALLET TOTALI", "ULTIMO AGG."];
     const { data: giacenze } = await supabase.from("giacenze").select("*").order("codice_articolo");
@@ -175,32 +200,28 @@ async function buildFoglio1(wb, supabase, tipo) {
     headers = ["", cfg.f1B, "DESCRIZIONE", "DATA", "TIPO", "COLLI", "PESO", "BOLLA", "PICKING"];
     const { data: movimenti } = await supabase.from("movimenti").select("*").order("data_movimento", { ascending: false }).limit(5000);
     data = (movimenti || []).map(m => [m.codice_articolo, m.descrizione_articolo, m.data_movimento, m.tipo, m.colli, m.peso, m.numero_bolla, m.picking]);
-  } else if (tipo === "documenti") {
+  } else {
     headers = ["", cfg.f1B, "ARTICOLO", "DESCRIZIONE", "DATA", "TIPO", "COLLI", "PESO", "PALLET"];
     const { data: documenti } = await supabase.from("documenti").select("*").order("data_documento", { ascending: false }).limit(5000);
     data = (documenti || []).map(d => [d.numero_bolla, d.codice_articolo, d.descrizione_articolo, d.data_documento, d.tipo, d.colli, d.peso_totale || d.quantita, d.pallet]);
   }
 
-  for (let c = 1; c < headers.length; c++) {
-    const cell = f1.getCell(1, c + 1);
-    cell.value = headers[c];
-    cell.fill = HL; cell.font = HF;
-  }
+  for (let c = 1; c < headers.length; c++) { const cell = f1.getCell(1, c + 1); cell.value = headers[c]; cell.fill = HC(colors.h); cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 }; cell.border = BDR; cell.alignment = { horizontal: "center", vertical: "middle" }; }
   f1.getRow(1).height = 28;
 
   (data || []).forEach((row, i) => {
     const r = i + 2;
+    const isEven = i % 2 === 0;
+    const rowColor = isEven ? colors.l : colors.alt;
+    for (let c = 1; c <= headers.length; c++) styleCell(f1.getCell(r, c), { fill: rowColor, border: BDR, font: { size: 10 } });
     f1.getCell(`A${r}`).value = i + 1;
-    row.forEach((v, j) => {
-      const cell = f1.getCell(r, j + 2);
-      cell.value = v;
-      cell.border = BDR;
-      if (typeof v === "number") cell.numFmt = NF;
-    });
+    row.forEach((v, j) => { const cell = f1.getCell(r, j + 2); cell.value = v; if (typeof v === "number") cell.numFmt = NF; });
   });
 
   f1.getColumn(1).width = 8;
-  for (let c = 2; c <= headers.length; c++) f1.getColumn(c).width = 22;
+  for (let c = 2; c <= headers.length; c++) f1.getColumn(c).width = 24;
+  f1.pageSetup.orientation = "landscape";
+  f1.pageSetup.fitToPage = true;
 }
 
 async function buildSoffassWorkbook(supabase, anno, tipo) {
@@ -209,7 +230,7 @@ async function buildSoffassWorkbook(supabase, anno, tipo) {
   wb.creator = "Gestionale LS SOFFASS";
   wb.created = new Date();
   const mesiData = await getTipoData(supabase, anno, tipo);
-  for (let m = 0; m < 12; m++) await buildMonthlySheet(wb, m, anno, cfg, mesiData);
+  for (let m = 0; m < 12; m++) await buildMonthlySheet(wb, m, anno, cfg, mesiData, TC[tipo]);
   await buildFoglio1(wb, supabase, tipo);
   return wb;
 }
