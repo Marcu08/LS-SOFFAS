@@ -103,7 +103,21 @@ router.post("/import-excel", auth, async (req, res) => {
         const supabase = req.app.locals.supabase;
         const wb = new Excel.Workbook();
         await wb.xlsx.readFile(req.file.path);
-        const ws = wb.worksheets[0];
+
+        const mesi = ["GENNAIO","FEBBRAIO","MARZO","APRILE","MAGGIO","GIUGNO","LUGLIO","AGOSTO","SETTEMBRE","OTTOBRE","NOVEMBRE","DICEMBRE"];
+        const meseCorrente = mesi[new Date().getMonth()];
+
+        let ws = wb.worksheets[0];
+        for (const sheet of wb.worksheets) {
+          const b1 = String(sheet.getCell("B1").value || "").trim();
+          const b18 = String(sheet.getCell("B18").value || "").trim();
+          const d18 = String(sheet.getCell("D18").value || "").trim();
+          const isSoffassSheet = b1 === "Pallet Entrati" || (b18 === "ENTRATI" && d18 === "USCITI");
+          if (isSoffassSheet) {
+            ws = sheet;
+            if (sheet.name.trim().toUpperCase() === meseCorrente) break;
+          }
+        }
 
         const cellB1 = String(ws.getCell("B1").value || "").trim();
         const cellB18 = String(ws.getCell("B18").value || "").trim();
