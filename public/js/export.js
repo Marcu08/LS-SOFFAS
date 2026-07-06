@@ -2,6 +2,34 @@
   render(el) {
     el.innerHTML = `
       <div class="card">
+        <div class="card-title">Scarica File SOFFASS (formato LUGLIO)</div>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica un Excel identico alla scheda mensile SOFFASS, pronto per il prossimo import.</p>
+        <div class="form-row" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Mese</label>
+            <select id="export-soffass-mese">
+              <option value="1">GENNAIO</option>
+              <option value="2">FEBBRAIO</option>
+              <option value="3">MARZO</option>
+              <option value="4">APRILE</option>
+              <option value="5">MAGGIO</option>
+              <option value="6">GIUGNO</option>
+              <option value="7" selected>LUGLIO</option>
+              <option value="8">AGOSTO</option>
+              <option value="9">SETTEMBRE</option>
+              <option value="10">OTTOBRE</option>
+              <option value="11">NOVEMBRE</option>
+              <option value="12">DICEMBRE</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Anno</label>
+            <input type="number" id="export-soffass-anno" value="${new Date().getFullYear()}" style="width:100px;">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="ExportPage.download('soffass')">Scarica File SOFFASS</button>
+      </div>
+      <div class="card">
         <div class="card-title">Esporta Giacenze</div>
         <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica l'elenco completo delle giacenze con colli, peso e pallet.</p>
         <button class="btn btn-success" onclick="ExportPage.download('giacenze')">Scarica Giacenze</button>
@@ -46,6 +74,11 @@
 
   async download(type) {
     let url = '/api/export/' + type;
+    if (type === 'soffass') {
+      const mese = document.getElementById('export-soffass-mese')?.value || '7';
+      const anno = document.getElementById('export-soffass-anno')?.value || new Date().getFullYear();
+      url += '?mese=' + mese + '&anno=' + anno;
+    }
     if (type === 'movimenti') {
       const from = document.getElementById('export-mov-from')?.value || '';
       const to = document.getElementById('export-mov-to')?.value || '';

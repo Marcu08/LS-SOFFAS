@@ -240,4 +240,153 @@ router.get("/documenti", auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get("/soffass", auth, async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+    const month = req.query.mese || (new Date().getMonth() + 1).toString();
+    const year = req.query.anno || new Date().getFullYear().toString();
+    const monthNames = ["","GENNAIO","FEBBRAIO","MARZO","APRILE","MAGGIO","GIUGNO","LUGLIO","AGOSTO","SETTEMBRE","OTTOBRE","NOVEMBRE","DICEMBRE"];
+    const meseNome = monthNames[parseInt(month)];
+
+    const { data: palletGiac } = await supabase.from("giacenze").select("*").eq("codice_articolo", "PALLET").maybeSingle();
+    const palletInDeposito = palletGiac ? palletGiac.pallet_totali : 0;
+
+    const { data: movimenti } = await supabase
+      .from("movimenti")
+      .select("tipo, pallet, data_movimento")
+      .eq("codice_articolo", "PALLET")
+      .gte("data_movimento", `${year}-${month.padStart(2,"0")}-01`)
+      .lte("data_movimento", `${year}-${month.padStart(2,"0")}-31`)
+      .order("data_movimento");
+
+    const daily = {};
+    if (movimenti) {
+      movimenti.forEach((m) => {
+        const d = m.data_movimento;
+        if (!daily[d]) daily[d] = { entrata: 0, uscita: 0 };
+        if (m.tipo === "ENTRATA") daily[d].entrata += m.pallet || 0;
+        else daily[d].uscita += m.pallet || 0;
+      });
+    }
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Gestionale LS SOFFASS";
+    wb.created = new Date();
+    const ws = wb.addWorksheet(meseNome);
+
+    // Row 1: Headers
+    ws.getCell("A1").value = "Pallet Entrati";
+    ws.getCell("B1").value = "Pallet Usciti";
+    ws.getCell("D1").value = "Pallet In deposito";
+    ws.getCell("F1").value = "Prezzo ";
+    ws.getCell("G1").value = "Deposito €";
+    ws.getCell("H1").value = "Ingresso a plt";
+    ws.getCell("I1").value = "Uscita a plt";
+    ["A1","B1","D1","F1","G1","H1","I1"].forEach(c => { ws.getCell(c).fill = HEADER_FILL; ws.getCell(c).font = HEADER_FONT; });
+    ws.getRow(1).height = 28;
+
+    // Row 2
+    ws.getCell("F2").value = "MQ PER DEP.";
+
+    // Row 3: Opening stock
+    const prezzo = 6750;
+    const tariffaIngresso = 6;
+    const tariffaUscita = 6;
+    ws.getCell("D3").value = palletInDeposito;
+    ws.getCell("F3").value = prezzo;
+    ws.getCell("G3").value = { formula: `F3*F4`, result: prezzo };
+    ws.getCell("H3").value = tariffaIngresso;
+    ws.getCell("I3").value = tariffaUscita;
+    ws.getCell("J3").value = "TARIFFE DA CONTRATTO";
+    ws.getRow(3).height = 20;
+
+    // Rows 4+: Daily data
+    const dates = Object.keys(daily).sort();
+    let rowNum = 4;
+    let totEntrata = 0, totUscita = 0;
+    let lastStock = palletInDeposito;
+
+    dates.forEach((d) => {
+      const entry = daily[d];
+      ws.getCell(`A${rowNum}`).value = entry.entrata > 0 ? entry.entrata : null;
+      ws.getCell(`B${rowNum}`).value = entry.uscita > 0 ? entry.uscita : null;
+      ws.getCell(`C${rowNum}`).value = null;
+      const newStock = lastStock + entry.entrata - entry.uscita;
+      ws.getCell(`D${rowNum}`).value = { formula: `D${rowNum-1}+A${rowNum}-B${rowNum}`, result: newStock };
+      ws.getCell(`E${rowNum}`).value = null;
+      ws.getCell(`F${rowNum}`).value = prezzo;
+      ws.getCell(`G${rowNum}`).value = { formula: `F${rowNum}*F4`, result: prezzo };
+      ws.getCell(`H${rowNum}`).value = tariffaIngresso;
+      ws.getCell(`I${rowNum}`).value = tariffaUscita;
+      ws.getRow(rowNum).height = 18;
+      totEntrata += entry.entrata;
+      totUscita += entry.uscita;
+      lastStock = newStock;
+      rowNum++;
+    });
+
+    // Fill empty rows up to row 17
+    while (rowNum <= 17) { ws.getRow(rowNum).height = 18; rowNum++; }
+
+    // Row 7 area: summary formulas (similar to original SOFFASS)
+    ws.getCell("B7").value = "Entrati plt n.";
+    ws.getCell("C7").value = null;
+    ws.getCell("D7").value = totEntrata;
+    ws.getCell("B8").value = "Usciti plt n.";
+    ws.getCell("D8").value = totUscita;
+    ws.getCell("G7").value = { formula: "D7*6", result: totEntrata * 6 };
+    ws.getCell("G8").value = { formula: "D8*6", result: totUscita * 6 };
+    ws.getCell("G10").value = { formula: "G4+G7+G8+G9", result: (totEntrata + totUscita) * 6 };
+
+    // Row 18: subsection headers
+    ws.getCell("B18").value = "ENTRATI";
+    ws.getCell("B18").font = { bold: true };
+    ws.getCell("D18").value = "USCITI";
+    ws.getCell("D18").font = { bold: true };
+
+    // Rows 19-37: Detail by date
+    const rowData = 19;
+    let detailRow = rowData;
+    dates.forEach((d) => {
+      const entry = daily[d];
+      if (entry.entrata > 0) {
+        ws.getCell(`B${detailRow}`).value = d;
+        ws.getCell(`C${detailRow}`).value = entry.entrata;
+        ws.getCell(`C${detailRow}`).numFmt = NUM_FMT;
+      }
+      if (entry.uscita > 0) {
+        ws.getCell(`D${detailRow}`).value = d;
+        ws.getCell(`E${detailRow}`).value = entry.uscita;
+        ws.getCell(`E${detailRow}`).numFmt = NUM_FMT;
+      }
+      ws.getRow(detailRow).height = 18;
+      detailRow++;
+    });
+    while (detailRow <= 37) { ws.getRow(detailRow).height = 18; detailRow++; }
+
+    // Row 38: Totals
+    ws.getCell("C38").value = { formula: `SUM(C19:C37)`, result: totEntrata };
+    ws.getCell("C38").numFmt = NUM_FMT;
+    ws.getCell("E38").value = { formula: `SUM(E19:E37)`, result: totUscita };
+    ws.getCell("E38").numFmt = NUM_FMT;
+
+    // Column widths
+    ws.getColumn(1).width = 16;
+    ws.getColumn(2).width = 16;
+    ws.getColumn(3).width = 18;
+    ws.getColumn(4).width = 16;
+    ws.getColumn(5).width = 18;
+    ws.getColumn(6).width = 10;
+    ws.getColumn(7).width = 14;
+    ws.getColumn(8).width = 16;
+    ws.getColumn(9).width = 14;
+    ws.getColumn(10).width = 24;
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=SOFFASS_${meseNome}_${year}.xlsx`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
