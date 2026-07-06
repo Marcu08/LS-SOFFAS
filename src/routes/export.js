@@ -184,20 +184,43 @@ async function buildSoffass(supabase, anno) {
     ws.pageSetup.orientation="landscape"; ws.pageSetup.fitToPage=true;
   }
 
-  // Foglio1
+  // Foglio1 — riepilogo giacenze + catalogo bobine
   const f1 = wb.addWorksheet("Foglio1");
+  const {data:giacenze}=await supabase.from("giacenze").select("*").order("codice_articolo");
+  const gh = ["","CODICE ARTICOLO","DESCRIZIONE","COLLI TOTALI","PESO TOTALE","PALLET TOTALI"];
+  let gr = 1;
+  for(let c=1;c<gh.length;c++){const cell=f1.getCell(gr,c+1);cell.value=gh[c];cell.fill=HC(cols.h);cell.font={bold:true,color:{argb:"FFFFFFFF"},size:11};cell.border=BDR;cell.alignment={horizontal:"center",vertical:"middle"};}
+  f1.getRow(gr).height=24;
+  f1.getCell("A"+gr).value="GIACENZE ATTUALI";
+  f1.getCell("A"+gr).font={bold:true,color:{argb:cols.h},size:10};
+  gr++;
+  (giacenze||[]).forEach((g,i)=>{const r=gr;const rc=i%2===0?cols.l:"FFFFFFFF";
+    [g.codice_articolo,g.descrizione_articolo,g.colli_totali||0,parseFloat(g.peso_totale||0),g.pallet_totali||0]
+    .forEach((v,j)=>{const c=f1.getCell(r,j+2);c.value=v;c.fill=HC(rc);c.border=BDR;c.font={size:10};if(typeof v==="number")c.numFmt=j===3?NF2:NF;});
+    f1.getCell("A"+r).value=i+1;f1.getCell("A"+r).fill=HC(rc);f1.getCell("A"+r).border=BDR;f1.getCell("A"+r).font={size:10};
+    gr++;
+  });
+  gr+=2; // blank rows
+
+  // Catalogo bobine
   const fh = ["","CODICE ARTICOLO","NUMERO PACKING LIST","PARTITA","ROTELLE","DATA ENTRATA","DATA USCITA"];
   const {data:dettagli}=await supabase.from("dettaglio_documenti").select("partita_lotto,numero_rotelle,peso,documento_id,posizione").order("posizione");
   const {data:documenti}=await supabase.from("documenti").select("id,codice_articolo,descrizione_articolo,numero_packing_list,data_documento,tipo");
   const dm={}; if(documenti) documenti.forEach(d=>dm[d.id]=d);
   const fd=(dettagli||[]).map(dt=>{const doc=dm[dt.documento_id];if(!doc)return null;return [doc.codice_articolo,doc.numero_packing_list,dt.partita_lotto,dt.numero_rotelle,doc.data_documento,doc.tipo==="USCITA"?doc.data_documento:null];}).filter(Boolean);
-  for(let c=1;c<fh.length;c++){const cell=f1.getCell(1,c+1);cell.value=fh[c];cell.fill=HC(cols.h);cell.font={bold:true,color:{argb:"FFFFFFFF"},size:11};cell.border=BDR;cell.alignment={horizontal:"center",vertical:"middle"};}
-  f1.getRow(1).height=28;
-  fd.forEach((row,i)=>{const r=i+2;const rc=i%2===0?cols.l:"FFFFFFFF";
+  f1.getCell("A"+gr).value="CATALOGO BOBINE";
+  f1.getCell("A"+gr).font={bold:true,color:{argb:cols.h},size:10};
+  for(let c=1;c<fh.length;c++){const cell=f1.getCell(gr,c+1);cell.value=fh[c];cell.fill=HC(cols.h);cell.font={bold:true,color:{argb:"FFFFFFFF"},size:11};cell.border=BDR;cell.alignment={horizontal:"center",vertical:"middle"};}
+  f1.getRow(gr).height=24;
+  gr++;
+  fd.forEach((row,i)=>{const r=gr;const rc=i%2===0?cols.l:"FFFFFFFF";
     for(let c=1;c<=fh.length;c++){f1.getCell(r,c).fill=HC(rc);f1.getCell(r,c).border=BDR;f1.getCell(r,c).font={size:10};}
     f1.getCell("A"+r).value=i+1;
-    row.forEach((v,j)=>{const cell=f1.getCell(r,j+2);if(j>=4&&v){cell.value=fmtDate(v);}else{cell.value=v;}if(typeof v==="number"&&j!==0)cell.numFmt=NF;});});
-  f1.getColumn(1).width=8;for(let c=2;c<=fh.length;c++)f1.getColumn(c).width=24;
+    row.forEach((v,j)=>{const cell=f1.getCell(r,j+2);if(j>=4&&v){cell.value=fmtDate(v);}else{cell.value=v;}if(typeof v==="number"&&j!==0)cell.numFmt=NF;});
+    gr++;
+  });
+  f1.getColumn(1).width=8;
+  for(let c=2;c<=7;c++)f1.getColumn(c).width=24;
   f1.pageSetup.orientation="landscape";f1.pageSetup.fitToPage=true;
 
   return wb;
