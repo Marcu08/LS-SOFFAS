@@ -70,6 +70,23 @@ html, body { height: 100%; font-family: var(--font); background: var(--gray-50);
 }
 .card-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--gray-800); }
 
+/* Card variants */
+.card-soffass { border-left: 4px solid var(--primary); background: linear-gradient(135deg, #fff 60%, #e8f0fe); }
+.card-soffass .card-title { color: var(--primary); }
+.card-giacenze { border-left: 4px solid var(--success); background: linear-gradient(135deg, #fff 60%, #ecfdf5); }
+.card-giacenze .card-title { color: var(--success); }
+.card-movimenti { border-left: 4px solid var(--warning); background: linear-gradient(135deg, #fff 60%, #fffbeb); }
+.card-movimenti .card-title { color: var(--warning); }
+.card-pallet { border-left: 4px solid #7c3aed; background: linear-gradient(135deg, #fff 60%, #f5f3ff); }
+.card-pallet .card-title { color: #7c3aed; }
+.card-documenti { border-left: 4px solid #0891b2; background: linear-gradient(135deg, #fff 60%, #ecfeff); }
+.card-documenti .card-title { color: #0891b2; }
+
+/* Compact cards for export page */
+.card-compact { padding: 14px 18px; margin-bottom: 10px; }
+.card-compact .card-title { margin-bottom: 6px; font-size: 14px; }
+.card-compact p { margin-bottom: 8px !important; font-size: 12px !important; }
+
 /* Stats grid */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .stat-card {

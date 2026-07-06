@@ -2,41 +2,40 @@
   render(el) {
     const anno = new Date().getFullYear();
     el.innerHTML = `
-      <div class="card">
+      <div class="card card-soffass">
         <div class="card-title">Scarica File SOFFASS Completo</div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">
-          Scarica l'intero workbook SOFFASS con tutti i 12 fogli mensili + catalogo bobine,
-          identico al file <strong>BOBINE SOFFASS - LIMITE (1).xlsx</strong>.
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">
+          Workbook completo — 12 fogli mensili + catalogo bobine, identico al file originale.
         </p>
-        <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-row" style="margin-bottom:8px;">
           <div class="form-group">
             <label>Anno</label>
-            <input type="number" id="export-anno" value="${anno}" style="width:120px;">
+            <input type="number" id="export-anno" value="${anno}" style="width:100px;">
           </div>
         </div>
-        <button class="btn btn-primary" onclick="ExportPage.download('soffass')" style="font-size:15px;padding:12px 24px;">
-          Scarica BOBINE SOFFASS.xlsx
-        </button>
+        <button class="btn btn-primary" onclick="ExportPage.download('soffass')">Scarica BOBINE SOFFASS.xlsx</button>
       </div>
-      <div class="card">
-        <div class="card-title">Esporta Giacenze</div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica il report SOFFASS con i dati delle giacenze.</p>
-        <button class="btn btn-success" onclick="ExportPage.download('giacenze')">Scarica Giacenze</button>
-      </div>
-      <div class="card">
-        <div class="card-title">Esporta Movimenti</div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica il report SOFFASS con lo storico movimenti.</p>
-        <button class="btn btn-success" onclick="ExportPage.download('movimenti')">Scarica Movimenti</button>
-      </div>
-      <div class="card">
-        <div class="card-title">Esporta Pallet (Riepilogo + Dettaglio)</div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica il report SOFFASS con i dati dei pallet.</p>
-        <button class="btn btn-success" onclick="ExportPage.download('pallet')">Scarica Report Pallet</button>
-      </div>
-      <div class="card">
-        <div class="card-title">Esporta Documenti</div>
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Scarica il report SOFFASS con l'elenco dei documenti.</p>
-        <button class="btn btn-success" onclick="ExportPage.download('documenti')">Scarica Documenti</button>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:4px;">
+        <div class="card card-compact card-giacenze">
+          <div class="card-title">Esporta Giacenze</div>
+          <p style="color:var(--gray-500);margin-bottom:8px;font-size:12px;">Report SOFFASS con i dati delle giacenze.</p>
+          <button class="btn btn-success btn-sm" onclick="ExportPage.download('giacenze')">Scarica</button>
+        </div>
+        <div class="card card-compact card-movimenti">
+          <div class="card-title">Esporta Movimenti</div>
+          <p style="color:var(--gray-500);margin-bottom:8px;font-size:12px;">Report SOFFASS con lo storico movimenti.</p>
+          <button class="btn btn-warning btn-sm" onclick="ExportPage.download('movimenti')">Scarica</button>
+        </div>
+        <div class="card card-compact card-pallet">
+          <div class="card-title">Esporta Pallet</div>
+          <p style="color:var(--gray-500);margin-bottom:8px;font-size:12px;">Report SOFFASS con tracking pallet.</p>
+          <button class="btn btn-sm" style="background:#7c3aed;color:white;" onclick="ExportPage.download('pallet')">Scarica</button>
+        </div>
+        <div class="card card-compact card-documenti">
+          <div class="card-title">Esporta Documenti</div>
+          <p style="color:var(--gray-500);margin-bottom:8px;font-size:12px;">Report SOFFASS con elenco documenti.</p>
+          <button class="btn btn-sm" style="background:#0891b2;color:white;" onclick="ExportPage.download('documenti')">Scarica</button>
+        </div>
       </div>
     `;
   },
