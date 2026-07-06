@@ -2,7 +2,10 @@ const { supabaseAdmin } = require("../db/supabase");
 
 class DuplicateService {
   static async check(data) {
-    if (!data.picking || !data.numero_bolla) return { duplicate: false, scenario: null, existing: null };
+    if (!data.picking || !data.numero_bolla) {
+      console.warn(`[DuplicateService] Controllo saltato: ${!data.picking ? "picking mancante" : ""} ${!data.numero_bolla ? "numero_bolla mancante" : ""}`);
+      return { duplicate: false, scenario: null, existing: null };
+    }
 
     let q = supabaseAdmin
       .from("documenti")

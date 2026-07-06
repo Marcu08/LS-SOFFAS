@@ -37,19 +37,31 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 app.locals.upload = upload;
 
-const fs_cleanup = () => {
-  const hrs = 1;
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) return;
+const fs_cleanup = async () => {
+  try {
+    const hrs = 1;
+    const files = await fs.promises.readdir(uploadDir).catch(() => []);
     const now = Date.now();
-    files.forEach((f) => {
-      const fp = path.join(uploadDir, f);
-      fs.stat(fp, (err, st) => {
-        if (err) return;
-        if (now - st.mtimeMs > hrs * 3600000) fs.unlink(fp, () => {});
-      });
-    });
-  });
+
+    const { data: activeDocs } = await supabaseAdmin
+      .from("documenti_raw")
+      .select("pdf_path")
+      .not("stato", "in", ["confirmed", "error"])
+      .not("pdf_path", "is", null);
+
+    const activePaths = new Set(activeDocs ? activeDocs.map(d => path.resolve(d.pdf_path)) : []);
+
+    for (const f of files) {
+      const fp = path.resolve(path.join(uploadDir, f));
+      if (activePaths.has(fp)) continue;
+      try {
+        const st = await fs.promises.stat(fp);
+        if (now - st.mtimeMs > hrs * 3600000) await fs.promises.unlink(fp);
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error("[cleanup] Errore:", e.message);
+  }
 };
 setInterval(fs_cleanup, 3600000);
 fs_cleanup();

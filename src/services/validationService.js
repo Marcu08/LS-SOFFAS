@@ -1,7 +1,7 @@
 class ValidationService {
   static rules = {
     required: (data) => {
-      const fields = ["numero_bolla", "codice_articolo", "descrizione_articolo"];
+      const fields = ["numero_bolla", "codice_articolo", "descrizione_articolo", "data_documento", "quantita"];
       const missing = fields.filter((f) => !data[f] || String(data[f]).trim() === "");
       return missing.length > 0
         ? { valid: false, errors: missing.map((f) => `Campo obbligatorio mancante: ${f}`) }

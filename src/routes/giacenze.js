@@ -106,6 +106,7 @@ router.post("/import-excel", auth, async (req, res) => {
         }
 
         const risultati = { processati: 0, errori: [], aggiornati: [] };
+        const dataImport = new Date().toISOString().split("T")[0];
 
         for (let i = 2; i <= ws.rowCount; i++) {
           const row = ws.getRow(i);
@@ -140,6 +141,21 @@ router.post("/import-excel", auth, async (req, res) => {
               pallet_totali: pallet,
             });
           }
+
+          await supabase.from("movimenti").insert([{
+            tipo: "ENTRATA",
+            codice_articolo: codArt,
+            descrizione_articolo: descr || "N/A",
+            colli, peso: qty, pallet,
+            data_movimento: dataImport,
+            numero_bolla: "PAREGGIO-" + dataImport + "-" + codArt,
+          }]);
+
+          await req.app.locals.supabaseAdmin.from("event_log").insert([{
+            evento: "stock_adjustment",
+            dettaglio: { codice_articolo: codArt, peso_kg: qty, colli, pallet, origine: "import_excel" },
+          }]);
+
           risultati.processati++;
           risultati.aggiornati.push({ codice_articolo: codArt, kg: qty, colli });
         }
@@ -163,6 +179,7 @@ async function importaSoffass(supabase, ws, req, res) {
   const movimenti = [];
   const errori = [];
   let righeValide = 0;
+  let righeSaltate = 0;
 
   const cellD3 = ws.getCell("D3").value;
   const palletInDeposito = parseInt(cellD3) || 0;
@@ -195,45 +212,63 @@ async function importaSoffass(supabase, ws, req, res) {
     }
   }
 
+  const { data: existingMovs } = await supabase
+    .from("movimenti")
+    .select("tipo, pallet, data_movimento")
+    .ilike("numero_bolla", "SOFFASS-%");
+
+  const existingKeys = new Set();
+  if (existingMovs) {
+    for (const m of existingMovs) {
+      existingKeys.add(`${m.tipo}|${m.data_movimento}|${m.pallet}`);
+    }
+  }
+
   for (let i = 19; i <= ws.rowCount; i++) {
     const row = ws.getRow(i);
-    const dataVal = row.getCell(4).value;
-    const qtyVal = parseInt(row.getCell(5).value) || 0;
 
-    if (!dataVal || qtyVal <= 0) continue;
+    if (!row.getCell(2).value && !row.getCell(3).value && !row.getCell(4).value && !row.getCell(5).value) continue;
 
-    let dataMov;
-    if (typeof dataVal === "object" && dataVal instanceof Date) {
-      dataMov = dataVal.toISOString().split("T")[0];
-    } else if (typeof dataVal === "number") {
-      const d = new Date((dataVal - 25569) * 86400 * 1000);
-      dataMov = d.toISOString().split("T")[0];
-    } else {
-      dataMov = String(dataVal);
-    }
+    const parseDate = (v) => {
+      if (!v) return null;
+      if (typeof v === "object" && v instanceof Date) return v.toISOString().split("T")[0];
+      if (typeof v === "number") return new Date((v - 25569) * 86400 * 1000).toISOString().split("T")[0];
+      return String(v);
+    };
 
-    const { error } = await supabase.from("movimenti").insert([{
-      tipo: "USCITA",
-      codice_articolo: "PALLET",
-      descrizione_articolo: "Uscita pallet da magazzino",
-      colli: 0,
-      peso: 0,
-      pallet: qtyVal,
-      data_movimento: dataMov,
-      numero_bolla: "SOFFASS-" + dataMov,
-    }]);
+    const entrata = { data: parseDate(row.getCell(2).value), qty: parseInt(row.getCell(3).value) || 0, tipo: "ENTRATA" };
+    const uscita = { data: parseDate(row.getCell(4).value), qty: parseInt(row.getCell(5).value) || 0, tipo: "USCITA" };
 
-    if (error) {
-      errori.push({ riga: i, errore: error.message });
-    } else {
-      righeValide++;
-      movimenti.push({ data: dataMov, pallet: qtyVal });
+    for (const m of [entrata, uscita]) {
+      if (!m.data || m.qty <= 0) continue;
+      const key = `${m.tipo}|${m.data}|${m.qty}`;
+      if (existingKeys.has(key)) {
+        righeSaltate++;
+        continue;
+      }
+      const { error } = await supabase.from("movimenti").insert([{
+        tipo: m.tipo,
+        codice_articolo: "PALLET",
+        descrizione_articolo: m.tipo === "ENTRATA" ? "Entrata pallet in magazzino" : "Uscita pallet da magazzino",
+        colli: 0,
+        peso: 0,
+        pallet: m.qty,
+        data_movimento: m.data,
+        numero_bolla: "SOFFASS-" + m.data,
+      }]);
+      if (error) {
+        errori.push({ riga: i, errore: error.message });
+      } else {
+        existingKeys.add(key);
+        righeValide++;
+        movimenti.push({ data: m.data, pallet: m.qty, tipo: m.tipo });
+      }
     }
   }
 
   try { fs.unlinkSync(req.file.path); } catch (e) {}
 
-  let message = `Import SOFFASS completato: ${righeValide} movimenti USCITA importati`;
+  let message = `Import SOFFASS completato: ${righeValide} movimenti importati (${righeSaltate} duplicati saltati)`;
   if (palletInDeposito > 0) message += ` | Pallet in deposito: ${palletInDeposito}`;
   if (errori.length > 0) message += ` | Errori: ${errori.length}`;
 

@@ -38,6 +38,9 @@ router.get("/:id", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
+    const { data: doc } = await supabase.from("documenti").select("*").eq("id", req.params.id).single();
+    if (!doc) return res.status(404).json({ error: "Documento non trovato" });
+
     const up = {};
     for (const k of ALLOWED_UPDATE) {
       if (req.body[k] !== undefined) up[k] = req.body[k];
@@ -46,6 +49,11 @@ router.put("/:id", auth, async (req, res) => {
     up.updated_at = new Date().toISOString();
     const { data, error } = await supabase.from("documenti").update(up).eq("id", req.params.id).select().single();
     if (error) return res.status(400).json({ error: error.message });
+
+    if (doc.stato === "confirmed" && (up.peso_totale !== undefined || up.colli !== undefined || up.pallet !== undefined)) {
+      await refreshGiacenze(supabase, doc.codice_articolo, doc.descrizione_articolo, doc.picking);
+    }
+
     res.json({ message: "Documento aggiornato", documento: data });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
